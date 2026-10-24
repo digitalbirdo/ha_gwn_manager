@@ -4,7 +4,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import area_registry as ar, device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -21,6 +22,26 @@ def client_name(mac: str, client: dict[str, Any]) -> str:
         if value and value.upper() != mac:
             return value
     return mac
+
+
+@callback
+def async_get_device(hass: HomeAssistant, entry_id: str, mac: str) -> dr.DeviceEntry | None:
+    """Return the device of this config entry for a client or AP MAC."""
+    return dr.async_get(hass).async_get_device_by_identifier((DOMAIN, mac), entry_id)
+
+
+@callback
+def async_client_area(
+    hass: HomeAssistant, entry_id: str, client: dict[str, Any]
+) -> str | None:
+    """Return the area of the AP a connected client is associated with."""
+    if not client.get("connected") or not (ap_mac := (client.get("apId") or "").upper()):
+        return None
+    device = async_get_device(hass, entry_id, ap_mac)
+    if device is None or device.area_id is None:
+        return None
+    area = ar.async_get(hass).async_get_area(device.area_id)
+    return area.name if area else None
 
 
 @callback

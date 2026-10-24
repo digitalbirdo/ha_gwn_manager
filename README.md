@@ -14,6 +14,8 @@ for every device connected to your GWN access points.
 - **Device tracker** per client (`home` / `not_home`), usable for presence and the `person` integration
 - Per-client sensors: signal strength, access point, SSID, band, last seen, IP address
   (disabled by default: connected since, channel, link rates, traffic, VLAN)
+- Clients are linked to the access point they are connected to ("Connected via"), following roaming
+- **Area** sensor per client: the area of its current access point (assign areas to your APs for room-level presence)
 - **Network access switch** per client (block / unblock), disabled by default
 - Per access point / switch / router: online state, connected clients, uptime, firmware, IP address,
   temperature, CPU usage, channel utilization per band (disabled by default: memory, channel per band);

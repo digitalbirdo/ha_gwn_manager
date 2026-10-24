@@ -31,6 +31,7 @@ from .coordinator import GWNConfigEntry, GWNCoordinator, parse_timestamp
 from .entity import (
     GWNAPEntity,
     GWNClientEntity,
+    async_client_area,
     async_setup_ap_entities,
     async_setup_client_entities,
 )
@@ -297,7 +298,8 @@ async def async_setup_entry(
         entry,
         async_add_entities,
         lambda coordinator, mac: [
-            GWNClientSensor(coordinator, mac, description) for description in CLIENT_SENSORS
+            *(GWNClientSensor(coordinator, mac, description) for description in CLIENT_SENSORS),
+            GWNClientAreaSensor(coordinator, mac),
         ],
     )
     async_setup_ap_entities(
@@ -328,6 +330,22 @@ class GWNClientSensor(GWNClientEntity, SensorEntity):
     @property
     def native_value(self) -> StateType | datetime:
         return self.entity_description.value_fn(self.client)
+
+
+class GWNClientAreaSensor(GWNClientEntity, SensorEntity):
+    """Area of the access point the client is connected to (room-level presence).
+
+    Assign areas to the access point devices to use it.
+    """
+
+    _attr_translation_key = "area"
+
+    def __init__(self, coordinator: GWNCoordinator, mac: str) -> None:
+        super().__init__(coordinator, mac, "area")
+
+    @property
+    def native_value(self) -> str | None:
+        return async_client_area(self.hass, self.coordinator.config_entry.entry_id, self.client)
 
 
 class GWNAPSensor(GWNAPEntity, SensorEntity):

@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import GWNConfigEntry, GWNCoordinator
-from .entity import async_setup_client_entities, client_name
+from .entity import async_client_area, async_setup_client_entities, client_name
 
 PARALLEL_UPDATES = 0
 
@@ -66,7 +66,12 @@ class GWNClientTracker(CoordinatorEntity[GWNCoordinator], ScannerEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         client = self.client
+        if not client.get("connected"):
+            return {}
         return {
             "access_point": client.get("apName"),
+            "area": async_client_area(
+                self.hass, self.coordinator.config_entry.entry_id, client
+            ),
             "ssid": client.get("ssid"),
         }
