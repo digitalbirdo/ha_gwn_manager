@@ -55,8 +55,6 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - Endpoints without parameters must be called without a request body; a signed `{}` is
   rejected with `Authentication Failure`.
 
-API documentation: https://doc.grandstream.dev/GWN-API/EN/
-
 ## Releasing
 
 Create a GitHub release with a tag like `v0.2.0`. The release workflow writes the version
