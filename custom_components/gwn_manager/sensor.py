@@ -234,6 +234,14 @@ CLIENT_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
         value_fn=lambda client: client.get("rxBytes"),
     ),
     GWNSensorEntityDescription(
+        key="switch_port",
+        translation_key="switch_port",
+        value_fn=lambda client: (client.get("port") or client.get("switchPortName") or None)
+        if client["connected"] and client.get("wired") == 1
+        else None,
+        exists_fn=lambda client: client.get("wired") == 1,
+    ),
+    GWNSensorEntityDescription(
         key="download_rate",
         translation_key="download_rate",
         device_class=SensorDeviceClass.DATA_RATE,
@@ -446,7 +454,11 @@ async def async_setup_entry(
         entry,
         async_add_entities,
         lambda coordinator, mac: [
-            *(GWNClientSensor(coordinator, mac, description) for description in CLIENT_SENSORS),
+            *(
+                GWNClientSensor(coordinator, mac, description)
+                for description in CLIENT_SENSORS
+                if description.exists_fn(coordinator.data.clients[mac])
+            ),
             GWNClientAreaSensor(coordinator, mac),
         ],
     )

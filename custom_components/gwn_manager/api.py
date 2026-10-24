@@ -223,11 +223,14 @@ class GWNClient:
     async def get_clients(self, network_id: int, connected_only: bool) -> list[dict[str, Any]]:
         """Return clients of a network.
 
-        ``connected_only=True`` returns only currently associated clients but
-        with live values (RSSI, link rate, channel, ...). Otherwise all known
-        clients are returned, including offline ones, without live values.
+        ``connected_only=True`` returns only currently connected clients but
+        with live values (RSSI, link rate, channel, ...), wired ones included.
+        Otherwise all known wireless clients are returned, including offline
+        ones, without live values. (The history of wired clients is left out:
+        it is mostly stale, nameless entries.)
         """
-        return await self._post_paged(
-            "/v1.0.0/client/list",
-            {"networkId": network_id, "untilNow": 0 if connected_only else 1},
-        )
+        body: dict[str, Any] = {"networkId": network_id, "untilNow": 0 if connected_only else 1}
+        if connected_only:
+            # Default filter is "all_ssid" (wireless only).
+            body["filter"] = {"ssidId": "all_client"}
+        return await self._post_paged("/v1.0.0/client/list", body)

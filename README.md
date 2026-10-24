@@ -21,6 +21,7 @@ for every device connected to your GWN access points.
   temperature, CPU usage, channel utilization per band (disabled by default: memory, channel per band);
   sensors are only created for values the device model reports
 - Timestamps are interpreted in the time zone configured for the GWN network
+- **Wired clients** (once seen connected) attached to their switch or router, with a switch port sensor
 - **Throughput** per client (download / upload), derived from the byte counters
 - **Connection events** – connected, disconnected, roamed – on the event bus
   (`gwn_manager_client_connected`, `gwn_manager_client_disconnected`, `gwn_manager_client_roamed`),

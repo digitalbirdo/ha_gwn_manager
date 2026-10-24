@@ -109,6 +109,9 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._rates: dict[str, tuple[float, float]] = {}
         # MAC -> AP MAC of connected clients after the previous update
         self._previous: dict[str, str | None] | None = None
+        # Wired clients seen connected since setup (MAC -> last record); the API
+        # only lists wired clients while they are connected.
+        self._wired: dict[str, dict[str, Any]] = {}
         # Router MAC -> (WAN rx bytes, WAN tx bytes, time) for the WAN throughput
         self._wan_samples: dict[str, tuple[int, int, datetime]] = {}
         self.client = GWNClient(
@@ -137,6 +140,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         data = GWNData(aps=self._full.aps, networks=self._full.networks, ssids=self._full.ssids)
         for mac, client in self._full.clients.items():
             data.clients[mac] = {**client, "connected": False}
+        for mac, client in self._wired.items():
+            data.clients.setdefault(mac, {**client, "connected": False})
 
         for network_id, time_zone in self._full.networks.items():
             for client in await self.client.get_clients(network_id, connected_only=True):
@@ -151,6 +156,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                     }
                 )
                 merged["connected"] = True
+                if client.get("wired") == 1:
+                    self._wired[mac] = {**merged}
                 self._last_connected[mac] = now
                 self._update_throughput(mac, client, now)
 

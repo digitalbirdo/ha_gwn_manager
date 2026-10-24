@@ -18,7 +18,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.1";
+const VERSION = "0.5.2";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -56,8 +56,8 @@ function linkLength(rssi) {
 }
 
 const STRINGS = {
-  en: { channel: "Channel", offline: "Offline", clients: "clients", signal: "Signal", band: "Band" },
-  de: { channel: "Kanal", offline: "Offline", clients: "Clients", signal: "Signal", band: "Band" },
+  en: { wired: "Wired", channel: "Channel", offline: "Offline", clients: "clients", signal: "Signal", band: "Band" },
+  de: { wired: "Kabel", channel: "Kanal", offline: "Offline", clients: "Clients", signal: "Signal", band: "Band" },
 };
 
 function escapeHtml(text) {
@@ -853,7 +853,9 @@ class GwnNetworkCard extends HTMLElement {
       html = `<b>${escapeHtml(d.name)}</b><br>
         ${d.connected
           ? `${escapeHtml(ap ?? "")}${d.rssi != null ? " · " + escapeHtml(d.rssi) + " dBm" : ""}<br>
-             ${d.band ? escapeHtml(d.band.replace("G", " GHz")) : ""}${d.channel != null ? ` · ${this._t("channel")} ` + escapeHtml(d.channel) : ""}<br>
+             ${d.wired
+               ? `${this._t("wired")}${d.port ? " · " + escapeHtml(d.port) : ""}`
+               : `${d.band ? escapeHtml(d.band.replace("G", " GHz")) : ""}${d.channel != null ? ` · ${this._t("channel")} ` + escapeHtml(d.channel) : ""}`}<br>
              <span class="muted">${escapeHtml(d.ssid ?? "")}</span><br>`
           : `<span class="muted">${this._t("offline")}</span><br>`}
         <span class="muted">${escapeHtml(d.ip ?? "")} · ${escapeHtml(d.mac)}</span>`;

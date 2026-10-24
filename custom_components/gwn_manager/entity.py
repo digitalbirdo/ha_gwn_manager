@@ -90,7 +90,7 @@ def async_setup_client_entities(
             for mac, client in coordinator.data.clients.items()
             if mac not in known
             and (track_offline or client["connected"])
-            and (not ssid_filter or client.get("ssid") in ssid_filter)
+            and (not ssid_filter or client.get("wired") == 1 or client.get("ssid") in ssid_filter)
         ]
         known.update(new)
         async_add_entities(entity for mac in new for entity in factory(coordinator, mac))

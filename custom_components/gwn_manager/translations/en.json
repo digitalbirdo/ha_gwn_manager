@@ -180,6 +180,9 @@
       },
       "wan_ip": {
         "name": "WAN IP address"
+      },
+      "switch_port": {
+        "name": "Switch port"
       }
     },
     "switch": {

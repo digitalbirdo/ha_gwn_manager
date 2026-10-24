@@ -66,7 +66,11 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
 
     bands: dict[str, dict[str, int]] = {}
     for client in coordinator.data.clients.values():
-        if client.get("connected") and (ap_mac := (client.get("apId") or "").upper()):
+        if (
+            client.get("connected")
+            and client.get("wired") != 1
+            and (ap_mac := (client.get("apId") or "").upper())
+        ):
             band = client.get("channelClassStr") or "?"
             bands.setdefault(ap_mac, {})[band] = bands.setdefault(ap_mac, {}).get(band, 0) + 1
 
@@ -107,6 +111,8 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "mac": mac,
                 "name": user_name or client_name(mac, client),
                 "connected": bool(client.get("connected")),
+                "wired": client.get("wired") == 1,
+                "port": client.get("port") or None,
                 "ap": (client.get("apId") or "").upper() or None,
                 "rssi": client.get("rssi") if client.get("connected") else None,
                 "band": client.get("channelClassStr") if client.get("connected") else None,
