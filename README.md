@@ -70,9 +70,9 @@ title: Mein Netzwerk     # optional
 appearance: auto         # auto, dark or light
 show_all_ports: false    # also show switch ports without link
 uplinks:                 # which port each device is plugged into – the GWN API doesn't report it
-  AP EG: Switch:17       # "<device>:<port>", or only the port number if there is one switch
-  AP OG: 21
-  Switch: AP Keller/Router:LAN1
+  Living Room AP: Switch:17  # "<device>:<port>", or only the port number if there is one switch
+  Office AP: 21
+  Switch: Gateway:LAN1
 ```
 
 Click a device to open its status.

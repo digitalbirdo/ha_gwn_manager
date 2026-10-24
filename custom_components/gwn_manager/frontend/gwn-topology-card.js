@@ -11,9 +11,9 @@
  *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   show_all_ports: false    # also show switch ports without link
  *   uplinks:                 # which port each device is plugged into (the API doesn't tell)
- *     AP EG: Switch:17       # "<device>:<port>", or just the port if there is one switch
- *     AP OG: 21
- *     Switch: AP Keller/Router:LAN1
+ *     Living Room AP: Switch:17   # "<device>:<port>", or just the port if there is one switch
+ *     Office AP: 21
+ *     Switch: Gateway:LAN1
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
