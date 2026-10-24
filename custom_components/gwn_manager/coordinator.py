@@ -109,6 +109,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._rates: dict[str, tuple[float, float]] = {}
         # MAC -> AP MAC of connected clients after the previous update
         self._previous: dict[str, str | None] | None = None
+        # Router MAC -> (WAN rx bytes, WAN tx bytes, time) for the WAN throughput
+        self._wan_samples: dict[str, tuple[int, int, datetime]] = {}
         self.client = GWNClient(
             async_get_clientsession(hass, verify_ssl=entry.data.get(CONF_VERIFY_SSL, True)),
             entry.data[CONF_SERVER_URL],
@@ -255,6 +257,44 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         for item in firmware:
             if (ap := aps.get(normalize_mac(item.get("mac")))) is not None:
                 ap["firmwareLatest"] = item.get("lastVersion")
+
+        for mac, ap in aps.items():
+            self._update_wan(mac, ap)
+
+    def _update_wan(self, mac: str, ap: dict[str, Any]) -> None:
+        """Extract the WAN port of a router and derive its throughput."""
+        wan = next(
+            (
+                port
+                for port in ap.get("info", {}).get("portInfo") or []
+                if port.get("role") == "1" or port.get("wanName")
+            ),
+            None,
+        )
+        if wan is None:
+            return
+        ipv4 = wan.get("ipv4Info") or {}
+        ap["wan"] = {
+            "name": wan.get("wanName") or wan.get("silkScreenPort"),
+            "connected": wan.get("linkStatus") == "1" and ipv4.get("connectStatus") == "1",
+            "wanIp": ipv4.get("ip4Address") or None,
+            "connectDuration": int(wan["connectDuration"]) if wan.get("connectDuration") else None,
+            "downloadRate": None,
+            "uploadRate": None,
+        }
+        aggregate = wan.get("aggregate") or {}
+        try:
+            rx, tx = int(aggregate["rxBytes"]), int(aggregate["txBytes"])
+        except (KeyError, TypeError, ValueError):
+            return
+        now = dt_util.utcnow()
+        previous = self._wan_samples.get(mac)
+        self._wan_samples[mac] = (rx, tx, now)
+        if previous and rx >= previous[0] and tx >= previous[1]:
+            elapsed = (now - previous[2]).total_seconds()
+            if elapsed > 0:
+                ap["wan"]["downloadRate"] = (rx - previous[0]) * 8 / elapsed
+                ap["wan"]["uploadRate"] = (tx - previous[1]) * 8 / elapsed
 
     async def _fetch_full(self) -> GWNData:
         """Fetch everything except the live client values."""

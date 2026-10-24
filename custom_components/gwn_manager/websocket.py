@@ -20,6 +20,34 @@ def async_register_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_subscribe_topology)
 
 
+def _ports(ap: dict[str, Any]) -> list[dict[str, Any]]:
+    """Ports of a switch or router in one shape for the cards."""
+    if ap.get("ports"):
+        return [
+            {
+                "id": str(port.get("portId")),
+                "label": str(port.get("silkScreenPort") or int(port.get("portId", 0)) + 1),
+                "up": port.get("operStatus") == "up",
+                "speed": int(port["operSpeed"]) if str(port.get("operSpeed") or "").isdigit() else None,
+                "poe": port.get("powerflag") == "on",
+                "clients": int(port["clientCount"]) if str(port.get("clientCount") or "").isdigit() else None,
+            }
+            for port in ap["ports"]
+        ]
+    return [
+        {
+            "id": str(port.get("portId")),
+            "label": port.get("silkScreenPort") or port.get("portName"),
+            "up": port.get("linkStatus") == "1",
+            "speed": None,
+            "poe": False,
+            "clients": None,
+            "wan": port.get("role") == "1",
+        }
+        for port in ap.get("info", {}).get("portInfo") or []
+    ]
+
+
 @callback
 def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     """Build the network map of one config entry."""
@@ -35,6 +63,12 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
             return None, None, None
         area = area_reg.async_get_area(device.area_id) if device.area_id else None
         return device.id, device.name_by_user, area
+
+    bands: dict[str, dict[str, int]] = {}
+    for client in coordinator.data.clients.values():
+        if client.get("connected") and (ap_mac := (client.get("apId") or "").upper()):
+            band = client.get("channelClassStr") or "?"
+            bands.setdefault(ap_mac, {})[band] = bands.setdefault(ap_mac, {}).get(band, 0) + 1
 
     aps = []
     for mac, ap in coordinator.data.aps.items():
@@ -57,6 +91,11 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "entity_id": ent_reg.async_get_entity_id(
                     "binary_sensor", DOMAIN, f"{mac}_online"
                 ),
+                "type": ap.get("deviceType"),
+                "firmware": ap.get("versionFirmware"),
+                "bands": bands.get(mac, {}),
+                "ports": _ports(ap),
+                "wan": ap.get("wan"),
             }
         )
 

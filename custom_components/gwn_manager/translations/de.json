@@ -64,6 +64,9 @@
       },
       "port_poe": {
         "name": "Port {port} PoE"
+      },
+      "wan": {
+        "name": "Internet"
       }
     },
     "sensor": {
@@ -168,6 +171,15 @@
       },
       "ssid_clients": {
         "name": "Verbundene Clients"
+      },
+      "wan_download": {
+        "name": "WAN-Download"
+      },
+      "wan_upload": {
+        "name": "WAN-Upload"
+      },
+      "wan_ip": {
+        "name": "WAN-IP-Adresse"
       }
     },
     "switch": {

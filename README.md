@@ -27,6 +27,7 @@ for every device connected to your GWN access points.
   in the logbook and as event entity per client (disabled by default)
 - **Switches**: link and PoE state per port, port link speed and throughput (disabled by default),
   total PoE power, CPU and memory
+- **WAN** of the gateway: internet connectivity, download/upload throughput, WAN IP (disabled by default)
 - **Firmware update** entity per device (installs the version GWN Manager recommends) and a **restart** button
 - **SSIDs** as devices with the number of connected clients and a **Wi-Fi QR code** image
   (contains the password, so disabled by default)
@@ -56,6 +57,25 @@ Assign your access points to areas and the areas to floors, and the map arranges
 floor (highest floor at the top). The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background
 to pan, double-click to fit again. Client names follow the device names you set in Home Assistant.
 Hover for details, click to open the device tracker / AP status.
+
+## Network topology card
+
+A structured view in the style of UniFi dashboards: access points with clients per band,
+switches with their ports (speed, PoE, what is connected), the internet gateway with WAN
+throughput, and uplink wires between them.
+
+```yaml
+type: custom:gwn-topology-card
+title: Mein Netzwerk     # optional
+appearance: auto         # auto, dark or light
+show_all_ports: false    # also show switch ports without link
+uplinks:                 # which port each device is plugged into – the GWN API doesn't report it
+  AP EG: Switch:17       # "<device>:<port>", or only the port number if there is one switch
+  AP OG: 21
+  Switch: AP Keller/Router:LAN1
+```
+
+Click a device to open its status.
 
 ## Installation
 

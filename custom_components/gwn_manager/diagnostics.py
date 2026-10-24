@@ -20,6 +20,9 @@ TO_REDACT = {
     "longitude",
     "latitude",
     "ssidWpaKey",
+    "ip4Address",
+    "wanMac",
+    "wanIp",
     "ssidWepKey",
     "ppskProfile",
 }

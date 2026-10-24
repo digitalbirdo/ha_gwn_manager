@@ -18,8 +18,8 @@ from .websocket import async_register_websocket
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-CARD_URL = "/gwn_manager/gwn-network-card.js"
-CARD_PATH = Path(__file__).parent / "frontend" / "gwn-network-card.js"
+FRONTEND_DIR = Path(__file__).parent / "frontend"
+CARDS = ("gwn-network-card.js", "gwn-topology-card.js")
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -37,10 +37,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Serve the network map card and register its WebSocket API."""
     version = (await async_get_integration(hass, DOMAIN)).version
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(CARD_PATH), cache_headers=False)]
+        [
+            StaticPathConfig(f"/gwn_manager/{card}", str(FRONTEND_DIR / card), cache_headers=False)
+            for card in CARDS
+        ]
     )
-    # Load the card in every frontend; the version busts the browser cache.
-    add_extra_js_url(hass, f"{CARD_URL}?v={version}")
+    # Load the cards in every frontend; the version busts the browser cache.
+    for card in CARDS:
+        add_extra_js_url(hass, f"/gwn_manager/{card}?v={version}")
     async_register_websocket(hass)
     return True
 

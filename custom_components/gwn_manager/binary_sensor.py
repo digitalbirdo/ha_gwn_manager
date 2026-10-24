@@ -23,7 +23,10 @@ async def async_setup_entry(
     async_setup_ap_entities(
         entry,
         async_add_entities,
-        lambda coordinator, mac: [GWNAPOnlineSensor(coordinator, mac)],
+        lambda coordinator, mac: [
+            GWNAPOnlineSensor(coordinator, mac),
+            *([GWNWanSensor(coordinator, mac)] if "wan" in coordinator.data.aps[mac] else []),
+        ],
     )
 
     def port_entities(coordinator: GWNCoordinator, mac: str, port_id: str) -> list:
@@ -75,3 +78,18 @@ class GWNPortPoESensor(GWNPortEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self.port.get("powerflag") == "on"
+
+
+class GWNWanSensor(GWNAPEntity, BinarySensorEntity):
+    """Whether the router's WAN port has an internet connection."""
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_translation_key = "wan"
+
+    def __init__(self, coordinator: GWNCoordinator, mac: str) -> None:
+        super().__init__(coordinator, mac, "wan")
+
+    @property
+    def is_on(self) -> bool | None:
+        wan = self.ap.get("wan")
+        return None if wan is None else wan["connected"]
