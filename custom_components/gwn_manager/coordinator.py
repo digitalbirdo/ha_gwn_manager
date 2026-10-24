@@ -336,7 +336,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             if (device_mac := find_device(device_ref)) is None:
                 continue
             if (child_mac := find_device(client_ref)) is not None:
-                # A network device, e.g. "AP UG = Switch:23".
+                # A network device, e.g. "Office AP = Switch:23".
                 own = (data.aps[child_mac].get("uplink") or {}).get("ownPort")
                 data.aps[child_mac]["uplink"] = {
                     "parent": device_mac,
