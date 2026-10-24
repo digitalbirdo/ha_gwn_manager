@@ -52,6 +52,7 @@ animate: true            # gentle floating of the bubbles
 color_by: rssi           # rssi or band (2.4 / 5 / 6 GHz); can also be switched on the card
 show_rssi: true          # signal strength on the client links; toggle with the dBm button
 appearance: auto         # auto (follows the Home Assistant dark mode), dark or light
+device_images: true      # product pictures in the device bubbles (from the GWN Manager)
 layout: auto             # floors, free or auto (floors as soon as an AP's area has a floor)
 ```
 
@@ -75,6 +76,8 @@ type: custom:gwn-topology-card
 title: Mein Netzwerk     # optional
 appearance: auto         # auto, dark or light
 show_all_ports: false    # also show switch ports without link
+device_images: true      # product pictures of the devices (from the GWN Manager)
+expanded: false          # show the details of all devices (also a button on the card)
 uplinks:                 # optional override – the integration detects uplinks itself
   Living Room AP: Switch:17  # "<device>:<port>", or only the port number if there is one switch
   Office AP: 21

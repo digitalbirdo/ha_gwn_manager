@@ -1,6 +1,7 @@
 """WebSocket API that feeds the network map card."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -12,6 +13,7 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er, fl
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry
 from .entity import async_get_device, client_name
+from .model_image import model_image_url
 
 
 @callback
@@ -48,6 +50,52 @@ def _ports(ap: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+# Client "staMode", e.g. "11NG_HT20", "11AC_VHT80", "11AXA_HE160", "11BE_EHT320"
+STA_MODE = re.compile(r"_(HT|VHT|HE|EHT)(\d+)")
+WIFI_GENERATION = {"HT": 4, "VHT": 5, "HE": 6, "EHT": 7}
+# Radios in the AP details and the band names the clients use
+RADIOS = (("g24", "2g4", "2.4G"), ("g5", "5g", "5G"), ("g6", "6g", "6G"))
+
+
+def _sta_mode(client: dict[str, Any]) -> tuple[int | None, int | None]:
+    """Wi-Fi generation and channel width (MHz) a client is connected with."""
+    if match := STA_MODE.search(client.get("staMode") or ""):
+        return WIFI_GENERATION[match.group(1)], int(match.group(2))
+    return None, None
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(str(value).strip().rstrip("%"))
+    except ValueError:
+        return None
+
+
+def _radios(ap: dict[str, Any], widths: dict[str, int]) -> list[dict[str, Any]]:
+    """Channel, transmit power and channel load of each active radio.
+
+    The API doesn't report the channel width of a radio, only the one each
+    client uses; the widest of those is shown.
+    """
+    details = ap.get("details") or {}
+    radios = []
+    for radio, key, band in RADIOS:
+        values = {item.get("key"): item.get("value") for item in details.get(radio) or []}
+        if not (channel := _int(values.get("channel"))):
+            continue
+        load = _int(details.get(f"channelload_{key}"))
+        radios.append(
+            {
+                "band": band,
+                "channel": channel,
+                "power": _int(values.get("power")),
+                "load": load if load is not None and 0 <= load <= 100 else None,
+                "width": widths.get(band),
+            }
+        )
+    return radios
+
+
 @callback
 def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     """Build the network map of one config entry."""
@@ -65,6 +113,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
         return device.id, device.name_by_user, area
 
     bands: dict[str, dict[str, int]] = {}
+    widths: dict[str, dict[str, int]] = {}
     for client in coordinator.data.clients.values():
         if (
             client.get("connected")
@@ -73,6 +122,9 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
         ):
             band = client.get("channelClassStr") or "?"
             bands.setdefault(ap_mac, {})[band] = bands.setdefault(ap_mac, {}).get(band, 0) + 1
+            if width := _sta_mode(client)[1]:
+                ap_widths = widths.setdefault(ap_mac, {})
+                ap_widths[band] = max(width, ap_widths.get(band, 0))
 
     aps = []
     for mac, ap in coordinator.data.aps.items():
@@ -83,6 +135,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "mac": mac,
                 "name": user_name or ap.get("name") or mac,
                 "model": ap.get("apType"),
+                "image": model_image_url(ap.get("apType")),
                 "online": ap.get("status") == 1,
                 "clients": ap.get("clients"),
                 "ip": ap.get("ipv4") or ap.get("ip"),
@@ -98,6 +151,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "type": ap.get("deviceType"),
                 "firmware": ap.get("versionFirmware"),
                 "bands": bands.get(mac, {}),
+                "radios": _radios(ap, widths.get(mac, {})),
                 "ports": _ports(ap),
                 "wan": ap.get("wan"),
                 # Physical uplink {parent, port, ownPort, source}, detected or manual
@@ -108,6 +162,8 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     clients = []
     for mac, client in coordinator.data.clients.items():
         device_id, user_name, _ = device_info(mac)
+        connected = bool(client.get("connected"))
+        generation, width = _sta_mode(client) if connected else (None, None)
         clients.append(
             {
                 "mac": mac,
@@ -119,6 +175,10 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "rssi": client.get("rssi") if client.get("connected") else None,
                 "band": client.get("channelClassStr") if client.get("connected") else None,
                 "channel": client.get("channel") if client.get("connected") else None,
+                "width": width,
+                "wifi": generation,
+                "tx_rate": client.get("txRate") if connected else None,
+                "rx_rate": client.get("rxRate") if connected else None,
                 "ssid": client.get("ssid"),
                 "ip": client.get("ipv4") or None,
                 "device_id": device_id,

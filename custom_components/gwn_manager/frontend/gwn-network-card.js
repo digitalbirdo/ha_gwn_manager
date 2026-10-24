@@ -14,12 +14,13 @@
  *   color_by: rssi           # rssi or band; can also be switched on the card
  *   show_rssi: true          # signal strength (dBm) on the client links; toggle with "dBm"
  *   appearance: auto         # auto (follows HA dark mode), dark or light
+ *   device_images: true      # product pictures in the device bubbles (loaded from the GWN Manager)
  *   layout: auto             # floors (APs arranged by the floor of their area), free, or auto
  *                            # (floors as soon as an AP's area is assigned to a floor)
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.6";
+const VERSION = "0.5.7";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -57,8 +58,8 @@ function linkLength(rssi) {
 }
 
 const STRINGS = {
-  en: { wired: "Wired", channel: "Channel", offline: "Offline", clients: "clients", signal: "Signal", band: "Band" },
-  de: { wired: "Kabel", channel: "Kanal", offline: "Offline", clients: "Clients", signal: "Signal", band: "Band" },
+  en: { wired: "Wired", channel: "Ch", offline: "Offline", clients: "clients", signal: "Signal", band: "Band" },
+  de: { wired: "Kabel", channel: "Ch", offline: "Offline", clients: "Clients", signal: "Signal", band: "Band" },
 };
 
 function escapeHtml(text) {
@@ -72,6 +73,7 @@ class GwnNetworkCard extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._nodes = new Map();
+    this._failedImages = new Set();
     this._links = [];
     // Floors of the APs, top floor first: [{ id, name, level }]
     this._floors = [];
@@ -98,6 +100,7 @@ class GwnNetworkCard extends HTMLElement {
       color_by: "rssi",
       appearance: "auto",
       layout: "auto",
+      device_images: true,
       ...config,
     };
     this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
@@ -471,6 +474,11 @@ class GwnNetworkCard extends HTMLElement {
         .node.client text { display: ${this._config.show_labels ? "block" : "none"}; fill: var(--gwn-muted); }
         .node.client:hover text, .node.client.hover text { display: block; fill: var(--gwn-text); }
         .node .count { font-size: 10px; fill: #fff; stroke: none; font-weight: 700; }
+        .node.ap.has-photo circle.body { fill: url(#gwn-photo); }
+        .node.ap.offline .photo { filter: grayscale(1); opacity: .6; }
+        .node circle.count-bg { fill: url(#gwn-ap); stroke: var(--gwn-node-stroke); stroke-width: 1; pointer-events: none; }
+        .node.ap.offline circle.count-bg { fill: url(#gwn-offline); }
+        .node image.photo { pointer-events: none; }
         .tooltip {
           position: absolute; pointer-events: none; display: none; z-index: 2;
           background: var(--gwn-tooltip-bg); color: var(--gwn-text);
@@ -518,6 +526,10 @@ class GwnNetworkCard extends HTMLElement {
               <radialGradient id="gwn-root" cx="35%" cy="30%" r="75%">
                 <stop offset="0%" stop-color="#b39dff"/>
                 <stop offset="100%" stop-color="#4527a0"/>
+              </radialGradient>
+              <radialGradient id="gwn-photo" cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stop-color="#2a4255"/>
+                <stop offset="100%" stop-color="#0d1a24"/>
               </radialGradient>
               <radialGradient id="gwn-offline" cx="35%" cy="30%" r="75%">
                 <stop offset="0%" stop-color="#ff8a80"/>
@@ -646,6 +658,18 @@ class GwnNetworkCard extends HTMLElement {
         const body = document.createElementNS(SVG_NS, "circle");
         body.setAttribute("class", "body");
         el.appendChild(body);
+        if (node.type === "ap") {
+          const photo = document.createElementNS(SVG_NS, "image");
+          photo.setAttribute("class", "photo");
+          photo.addEventListener("error", () => {
+            this._failedImages.add(photo.getAttribute("href"));
+            this._syncElements();
+          });
+          el.appendChild(photo);
+          const countBg = document.createElementNS(SVG_NS, "circle");
+          countBg.setAttribute("class", "count-bg");
+          el.appendChild(countBg);
+        }
         const label = document.createElementNS(SVG_NS, "text");
         label.setAttribute("class", "label");
         label.setAttribute("text-anchor", "middle");
@@ -672,6 +696,31 @@ class GwnNetworkCard extends HTMLElement {
         r += Math.min(Math.sqrt(n) * 2, 10);
         el.querySelector(".count").textContent = n || "";
         el.querySelector(".pulse").setAttribute("r", r);
+        // Product picture inside the bubble, client count then moves to a badge.
+        const src = this._config.device_images && d.image && !this._failedImages.has(d.image) ? d.image : null;
+        const photo = el.querySelector(".photo");
+        const count = el.querySelector(".count");
+        const countBg = el.querySelector(".count-bg");
+        el.classList.toggle("has-photo", !!src);
+        if (src) {
+          const size = r * 1.42; // square inside the circle, so the whole picture stays visible
+          if (photo.getAttribute("href") !== src) photo.setAttribute("href", src);
+          for (const [key, value] of Object.entries({ x: -size / 2, y: -size / 2, width: size, height: size })) {
+            photo.setAttribute(key, value.toFixed(1));
+          }
+          const bx = (r * 0.75).toFixed(1);
+          const by = (-r * 0.75).toFixed(1);
+          countBg.setAttribute("cx", bx);
+          countBg.setAttribute("cy", by);
+          countBg.setAttribute("r", n ? 8 : 0);
+          count.setAttribute("x", bx);
+          count.setAttribute("y", by);
+        } else {
+          photo.removeAttribute("href");
+          countBg.setAttribute("r", 0);
+          count.removeAttribute("x");
+          count.removeAttribute("y");
+        }
       }
       if (node.type === "client") circle.setAttribute("fill", this._clientColor(d));
       circle.setAttribute("r", r);
@@ -912,6 +961,9 @@ class GwnNetworkCard extends HTMLElement {
       html = `<b>${escapeHtml(d.name)}</b><br>
         <span class="muted">${escapeHtml(d.model ?? "")}${d.area ? " · " + escapeHtml(d.area) : ""}</span><br>
         ${d.online ? "Online" : this._t("offline")} · ${escapeHtml(d.clients ?? 0)} ${this._t("clients")}<br>
+        ${(d.radios || []).map((r) => `${escapeHtml(r.band.replace("G", " GHz"))}: ${this._t("channel")} ${escapeHtml(r.channel)}${
+          r.width ? ` · ${escapeHtml(r.width)} MHz` : ""}${r.power != null ? ` · ${escapeHtml(r.power)} dBm` : ""}${
+          r.load != null ? ` · ${escapeHtml(r.load)} %` : ""}<br>`).join("")}
         <span class="muted">${escapeHtml(d.ip ?? "")}</span>`;
     } else {
       const ap = d.ap ? this._nodes.get(`ap:${d.ap}`)?.data?.name : null;
@@ -920,7 +972,8 @@ class GwnNetworkCard extends HTMLElement {
           ? `${escapeHtml(ap ?? "")}${d.rssi != null ? " · " + escapeHtml(d.rssi) + " dBm" : ""}<br>
              ${d.wired
                ? `${this._t("wired")}${d.port ? " · " + escapeHtml(d.port) : ""}`
-               : `${d.band ? escapeHtml(d.band.replace("G", " GHz")) : ""}${d.channel != null ? ` · ${this._t("channel")} ` + escapeHtml(d.channel) : ""}`}<br>
+               : `${d.band ? escapeHtml(d.band.replace("G", " GHz")) : ""}${d.channel != null ? ` · ${this._t("channel")} ` + escapeHtml(d.channel) : ""}${
+                   d.width ? ` · ${escapeHtml(d.width)} MHz` : ""}${d.wifi ? ` · Wi-Fi ${escapeHtml(d.wifi)}` : ""}`}<br>
              <span class="muted">${escapeHtml(d.ssid ?? "")}</span><br>`
           : `<span class="muted">${this._t("offline")}</span><br>`}
         <span class="muted">${escapeHtml(d.ip ?? "")} · ${escapeHtml(d.mac)}</span>`;

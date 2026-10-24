@@ -25,6 +25,7 @@ custom_components/gwn_manager/
   config_flow.py    Setup, reauth, options
   sensor.py binary_sensor.py device_tracker.py switch.py button.py update.py image.py event.py
   websocket.py      gwn_manager/subscribe_topology (feeds the card)
+  model_image.py    /gwn_manager/model/<model>.png: proxies the product pictures of the GWN Manager
   logbook.py        Logbook texts for the client events
   diagnostics.py    Diagnostics with redaction
   frontend/gwn-network-card.js   Network map card (plain web component, no build step)
@@ -62,6 +63,10 @@ Docs: https://doc.grandstream.dev/GWN-API/EN/ – they are incomplete; these wer
 - `v2.0.0/ap/info` accepts a MAC list but only answers for the first MAC.
   Some models report nonsense (CPU `192224%`, memory `0 MB`) – values are sanity-checked.
 - `upgrade/version` returns MACs without colons (`normalize_mac`).
+- The channel width of a radio can't be read (`ap_*_width` exists only in `ap/config/edit`).
+  Each live client has it in `staMode`, e.g. `11AXA_HE80` = Wi-Fi 6 at 80 MHz (HT/VHT/HE/EHT = Wi-Fi 4/5/6/7).
+- Product pictures: `/img/topo/main_icon/<model>.png`, no login (GWN Manager and GWN.Cloud);
+  unknown models return the web UI's HTML with status 200.
 - Switch port rates are bit/s; PoE per port can be read (`powerflag`) but **not** switched.
 - Timestamps without offset (`lastSeen`) are in the network's time zone (`network/detail`).
 - `subscribe/*` push only supports BLE clients and alerts – no client connection push.

@@ -17,6 +17,7 @@ PAGE_SIZE = 100
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 # Renew the token a bit before it actually expires.
 TOKEN_EXPIRY_MARGIN = 60
+MAX_IMAGE_SIZE = 1_000_000
 
 
 class GWNError(Exception):
@@ -234,3 +235,21 @@ class GWNClient:
             # Default filter is "all_ssid" (wireless only).
             body["filter"] = {"ssidId": "all_client"}
         return await self._post_paged("/v1.0.0/client/list", body)
+
+    async def get_model_image(self, model: str) -> bytes | None:
+        """Product picture of a device model, as the GWN web UI shows it.
+
+        Served without login by GWN Manager and GWN.Cloud. Unknown models get
+        the web UI's HTML page instead of an error, hence the content type check.
+        """
+        try:
+            async with self._session.get(
+                f"{self._base_url}/img/topo/main_icon/{model}.png", timeout=REQUEST_TIMEOUT
+            ) as resp:
+                if resp.status != 200 or resp.content_type != "image/png":
+                    return None
+                data = await resp.read()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.debug("Cannot fetch the picture of %s: %s", model, err)
+            return None
+        return data if len(data) <= MAX_IMAGE_SIZE else None

@@ -15,6 +15,7 @@ from homeassistant.loader import async_get_integration
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry, GWNCoordinator
 from .entity import async_get_device
+from .model_image import GWNModelImageView
 from .websocket import async_register_websocket
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -43,6 +44,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             for card in CARDS
         ]
     )
+    hass.http.register_view(GWNModelImageView(hass))
     await _async_register_cards(hass, version)
     async_register_websocket(hass)
     return True

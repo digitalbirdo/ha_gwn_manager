@@ -10,6 +10,8 @@
  *   title: Mein Netzwerk     # optional, default: GWN Manager entry title
  *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   show_all_ports: false    # also show switch ports without link
+ *   expanded: false          # show the details of all devices (also a button on the card)
+ *   device_images: true      # product pictures of the devices (loaded from the GWN Manager)
  *   uplinks:                 # which port each device is plugged into (the API doesn't tell)
  *     Living Room AP: Switch:17   # "<device>:<port>", or just the port if there is one switch
  *     Office AP: 21
@@ -17,8 +19,10 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.6";
+const TOPOLOGY_VERSION = "0.5.7";
 const RESUBSCRIBE_MS = 90_000;
+const MAX_CLIENT_ROWS = 20;
+const EXPAND_KEY = "gwn-topology-card:expanded";
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
 const TEXT = {
@@ -29,7 +33,9 @@ const TEXT = {
     unknown: "Unknown", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "active ports", uplinkUnknown: "Uplink unknown", noData: "Waiting for data…",
     port: "Port", wired: "Wired", tapHint: "Tap a device to show its connections",
-    noClients: "No clients connected",
+    noClients: "No clients connected", details: "Details", copy: "Copy", copied: "Copied",
+    radios: "Radios", band: "Band", channel: "Ch", width: "Width", txPower: "Power", load: "Load",
+    widthHint: "Width: widest one a client uses",
   },
   de: {
     topology: "Netzwerk-Topologie", ap: "Access Point", gateway: "Internet-Gateway", switch: "Switch",
@@ -38,7 +44,9 @@ const TEXT = {
     unknown: "Unbekannt", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "aktive Ports", uplinkUnknown: "Uplink unbekannt", noData: "Warte auf Daten …",
     port: "Port", wired: "Kabel", tapHint: "Gerät antippen, um Verbindungen zu zeigen",
-    noClients: "Keine Clients verbunden",
+    noClients: "Keine Clients verbunden", details: "Details", copy: "Kopieren", copied: "Kopiert",
+    radios: "Funk", band: "Band", channel: "Ch", width: "Breite", txPower: "Leistung", load: "Auslastung",
+    widthHint: "Breite: die breiteste, die ein Client nutzt",
   },
 };
 
@@ -68,6 +76,7 @@ class GwnTopologyCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._networks = null;
     this._lastMessage = 0;
+    this._failedImages = new Set();
   }
 
   static getStubConfig() {
@@ -75,7 +84,15 @@ class GwnTopologyCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { appearance: "auto", show_all_ports: false, uplinks: {}, ...config };
+    this._config = { appearance: "auto", show_all_ports: false, device_images: true, expanded: false, uplinks: {}, ...config };
+    // The button state is remembered per browser, the option is the default.
+    let stored = null;
+    try {
+      stored = localStorage.getItem(EXPAND_KEY);
+    } catch (err) {
+      // Storage blocked: use the option.
+    }
+    this._expandAll = stored === null ? Boolean(this._config.expanded) : stored === "1";
     this._render();
   }
 
@@ -92,7 +109,10 @@ class GwnTopologyCard extends HTMLElement {
 
   connectedCallback() {
     if (this._hass && !this._unsub) this._subscribe();
-    this._resizeObserver = new ResizeObserver(() => this._drawWires());
+    this._resizeObserver = new ResizeObserver(() => {
+      this._limitClientLists();
+      this._drawWires();
+    });
     this._resizeObserver.observe(this);
     this._watchdog = setInterval(() => {
       if (this._hass && Date.now() - this._lastMessage > RESUBSCRIBE_MS) this._subscribe();
@@ -235,23 +255,67 @@ class GwnTopologyCard extends HTMLElement {
 
     const rssiColor = (rssi) =>
       rssi == null ? "var(--muted)" : rssi >= -60 ? "#3ee08f" : rssi >= -70 ? "#a3e635" : rssi >= -80 ? "#f5c542" : "#f87171";
+    const down = `<b class="down">↓</b>`;
+    const up = `<b class="up">↑</b>`;
+    const ghz = (band) => (band || "").replace("G", " GHz");
+    // Channel, width, transmit power and load of each radio of the selected device.
+    const radioTable = (device) => {
+      const radios = device.radios || [];
+      if (!radios.length) return "";
+      const cell = (value, unit) => (value == null ? "–" : `${esc(value)}${unit}`);
+      return `
+        <div class="radios">
+          <div class="radio-row head">
+            <span>${esc(this._t("band"))}</span><span>${esc(this._t("channel"))}</span>
+            <span>${esc(this._t("width"))}</span><span>${esc(this._t("txPower"))}</span><span>${esc(this._t("load"))}</span>
+          </div>
+          ${radios.map((r) => `
+            <div class="radio-row">
+              <span class="rband b${esc(r.band)}">${esc(ghz(r.band))}</span><span>${cell(r.channel, "")}</span>
+              <span>${cell(r.width, " MHz")}</span><span>${cell(r.power, " dBm")}</span>
+              <span>${r.load == null ? "–" : `<b class="load" style="--load:${Number(r.load)}%"></b>${esc(r.load)} %`}</span>
+            </div>`).join("")}
+          ${radios.some((r) => r.width != null) ? `<div class="hint">${esc(this._t("widthHint"))}</div>` : ""}
+        </div>`;
+    };
+    const clientMeta = (c) => {
+      if (c.wired) return `${esc(this._t("wired"))}${c.port ? ` · ${esc(c.port)}` : ""}`;
+      // One line: short band name, rates without unit.
+      const parts = [
+        c.band,
+        c.channel != null ? `${this._t("channel")} ${c.channel}` : null,
+        c.width ? `${c.width} MHz` : null,
+        c.wifi ? `Wi-Fi ${c.wifi}${c.wifi === 6 && c.band === "6G" ? "E" : ""}` : null,
+      ].filter(Boolean).map((part) => `<span class="part">${esc(part)}</span>`);
+      // Link rates in Mbit/s; tx is the client's upload, rx its download.
+      if (c.tx_rate != null && c.rx_rate != null) {
+        parts.push(`<span class="part">${down}${esc(c.rx_rate)} ${up}${esc(c.tx_rate)}</span>`);
+      }
+      return parts.join(" · ");
+    };
     const clientList = (device) => {
-      if (this._selected !== device.mac) return "";
+      if (!this._expandAll && this._selected !== device.mac) return "";
       const list = clients
         .filter((c) => c.connected && c.ap === device.mac)
         .sort((a, b) => Number(a.wired) - Number(b.wired) || (b.rssi ?? -999) - (a.rssi ?? -999));
-      if (!list.length) return `<div class="client-list empty-list">${esc(this._t("noClients"))}</div>`;
-      return `<div class="client-list">${list
-        .map((c) => `
+      const rows = list.length
+        ? list.map((c) => `
           <div class="client-row" data-client-entity="${esc(c.entity_id ?? "")}">
             <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
-            <span class="cname">${esc(c.name)}</span>
-            <span class="cmeta">${c.wired
-              ? `${esc(this._t("wired"))}${c.port ? ` · ${esc(c.port)}` : ""}`
-              : `${esc((c.band || "").replace("G", " GHz"))}${c.rssi != null ? ` · ${esc(c.rssi)} dBm` : ""}`}</span>
-          </div>`)
-        .join("")}</div>`;
+            <span class="cbody">
+              <span class="cline"><span class="cname">${esc(c.name)}</span>${c.ip
+                ? `<button class="ip" data-copy="${esc(c.ip)}" title="${esc(this._t("copy"))}">${esc(c.ip)}</button>` : ""}${c.rssi != null && !c.wired
+                ? `<span class="rssi" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
+              <span class="cmeta">${clientMeta(c)}</span>
+            </span>
+          </div>`).join("")
+        : `<div class="empty-list">${esc(this._t("noClients"))}</div>`;
+      return `<div class="client-list">${radioTable(device)}${rows}</div>`;
     };
+    // Product picture from the GWN Manager; pictures that failed to load stay off.
+    const image = (device) =>
+      this._config.device_images && device.image && !this._failedImages.has(device.image) ? device.image : null;
+
     const infoButton = (device) =>
       device.entity_id ? `<button class="info" data-info="${esc(device.entity_id)}" title="Info">ⓘ</button>` : "";
 
@@ -268,7 +332,9 @@ class GwnTopologyCard extends HTMLElement {
               ${infoButton(ap)}
             </span>
           </div>
-          <div class="avatar"><span>G</span><i class="${ap.online ? "ok" : "bad"}"></i></div>
+          ${image(ap)
+            ? `<div class="avatar photo"><img src="${esc(image(ap))}" alt="${esc(ap.model ?? "")}"><i class="${ap.online ? "ok" : "bad"}"></i></div>`
+            : `<div class="avatar"><span>G</span><i class="${ap.online ? "ok" : "bad"}"></i></div>`}
           <div class="name">${esc(ap.name)}</div>
           <div class="model">${esc(ap.model ?? "")}${ap.area ? ` · ${esc(ap.area)}` : ""}</div>
           <div class="clients"><b class="dia">◈</b><b class="n">${total}</b> ${esc(this._t("clients"))}</div>
@@ -311,7 +377,7 @@ class GwnTopologyCard extends HTMLElement {
       const total = wireless.reduce((a, [, n]) => a + n, 0);
       const info = kind === "gateway"
         ? `<div class="wan">
-             ${device.wan ? `<div class="rates"><b class="dia">◈</b><span>↓ ${esc(formatRate(device.wan.downloadRate))}</span><span>↑ ${esc(formatRate(device.wan.uploadRate))}</span></div>` : ""}
+             ${device.wan ? `<div class="rates"><b class="dia">◈</b><span>${down} ${esc(formatRate(device.wan.downloadRate))}</span><span>${up} ${esc(formatRate(device.wan.uploadRate))}</span></div>` : ""}
              ${total ? `<div class="muted small gw-clients"><b class="dia">◈</b>${total} ${esc(this._t("clients"))} · ${bandText(device.bands)}</div>` : ""}
            </div>`
         : `<div class="brand"><span>G</span><small>NETWORK</small></div>`;
@@ -324,7 +390,9 @@ class GwnTopologyCard extends HTMLElement {
         <div class="panel ${kind} ${device.online ? "" : "is-offline"} ${this._selected === device.mac ? "selected" : ""}" data-mac="${esc(device.mac)}" data-select="${esc(device.mac)}"
              style="--wire:${wireColor.get(device.mac) || "var(--muted)"}">
           <div class="panel-head">
-            <div class="icon-box"><b>◈</b></div>
+            ${image(device)
+              ? `<div class="icon-box photo"><img src="${esc(image(device))}" alt="${esc(device.model ?? "")}"></div>`
+              : `<div class="icon-box"><b>◈</b></div>`}
             <div>
               <div class="name">${esc(device.name)}</div>
               <div class="model">${esc(kind === "gateway" ? this._t("gateway") + " · " : "")}${esc(device.model ?? "")}${device.area ? ` · ${esc(device.area)}` : ""}</div>
@@ -351,7 +419,10 @@ class GwnTopologyCard extends HTMLElement {
               <div class="eyebrow">${esc(this._t("topology"))}</div>
               <div class="title">${esc(this._config.title ?? net?.title ?? "GWN")}</div>
             </div>
-            <div class="chips">${chips}</div>
+            <div class="chips">${chips}${net ? `
+              <button class="chip toggle ${this._expandAll ? "on" : ""}" data-expand aria-pressed="${this._expandAll}">
+                <b>${this._expandAll ? "▴" : "▾"}</b>${esc(this._t("details"))}
+              </button>` : ""}</div>
           </div>
           ${this._error ? `<div class="empty bad">${esc(this._error)}</div>` : ""}
           ${!net && !this._error ? `<div class="empty">${esc(this._t("noData"))}</div>` : ""}
@@ -373,6 +444,15 @@ class GwnTopologyCard extends HTMLElement {
     this._applyAppearance();
     const moreInfo = (entityId) =>
       entityId && this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } }));
+    this.shadowRoot.querySelector("[data-expand]")?.addEventListener("click", () => {
+      this._expandAll = !this._expandAll;
+      try {
+        localStorage.setItem(EXPAND_KEY, this._expandAll ? "1" : "0");
+      } catch (err) {
+        // Storage blocked: only for this page view.
+      }
+      this._render();
+    });
     for (const el of this.shadowRoot.querySelectorAll("[data-select]")) {
       el.addEventListener("click", () => {
         this._selected = this._selected === el.dataset.select ? null : el.dataset.select;
@@ -385,13 +465,69 @@ class GwnTopologyCard extends HTMLElement {
         moreInfo(el.dataset.info);
       });
     }
+    for (const el of this.shadowRoot.querySelectorAll("[data-copy]")) {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._copy(el);
+      });
+    }
     for (const el of this.shadowRoot.querySelectorAll("[data-client-entity]")) {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
         moreInfo(el.dataset.clientEntity);
       });
     }
-    requestAnimationFrame(() => this._drawWires());
+    for (const img of this.shadowRoot.querySelectorAll(".photo img")) {
+      img.addEventListener("error", () => {
+        this._failedImages.add(img.getAttribute("src"));
+        this._render();
+      }, { once: true });
+    }
+    requestAnimationFrame(() => {
+      this._limitClientLists();
+      this._drawWires();
+    });
+  }
+
+  // Copy the button's value; navigator.clipboard only exists on HTTPS/localhost.
+  async _copy(el) {
+    const text = el.dataset.copy;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (err) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(area);
+      area.select();
+      try {
+        ok = document.execCommand("copy");
+      } catch (err2) {
+        ok = false;
+      }
+      area.remove();
+    }
+    el.textContent = ok ? `✓ ${this._t("copied")}` : text;
+    el.classList.toggle("copied", ok);
+    setTimeout(() => {
+      el.textContent = text;
+      el.classList.remove("copied");
+    }, 1200);
+  }
+
+  // Client lists grow with their entries and only scroll beyond MAX_CLIENT_ROWS.
+  _limitClientLists() {
+    for (const list of this.shadowRoot.querySelectorAll(".client-list")) {
+      const rows = list.querySelectorAll(".client-row");
+      if (rows.length <= MAX_CLIENT_ROWS) continue;
+      // Top of the first row past the limit; stays the same once the list scrolls.
+      const height = Math.round(
+        rows[MAX_CLIENT_ROWS].getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop
+      );
+      if (height > 0 && list.style.maxHeight !== `${height}px`) list.style.maxHeight = `${height}px`;
+    }
   }
 
   _isCompact() {
@@ -476,6 +612,7 @@ const STYLE = `
     --plate: linear-gradient(180deg, #f5f7f9 0%, #dfe5ea 100%); --plate-text: #24323f;
     --gw-plate: linear-gradient(180deg, #123444 0%, #0f2a36 100%);
     --bar: #0c1d24; --glow: 1;
+    --photo-bg: radial-gradient(circle at 40% 30%, #22394c 0%, #0d1a24 100%);
   }
   .wrap.light {
     --bg: linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
@@ -485,6 +622,7 @@ const STYLE = `
     --plate: linear-gradient(180deg, #ffffff 0%, #e6ebf0 100%); --plate-text: #24323f;
     --gw-plate: linear-gradient(180deg, #e8f2f6 0%, #dbe9ef 100%);
     --bar: #102530; --glow: 0;
+    --photo-bg: radial-gradient(circle at 40% 30%, #2a4255 0%, #13222e 100%);
   }
   .header {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -497,6 +635,9 @@ const STYLE = `
     display: inline-flex; align-items: center; gap: 7px; font-size: 12px; padding: 6px 12px;
     border: 1px solid var(--card-border); border-radius: 999px; color: var(--text);
   }
+  button.chip { background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+  button.chip:hover { border-color: var(--accent); }
+  button.chip.on { background: rgba(56, 198, 232, .14); border-color: var(--accent); }
   .chip > b, .dia, .kind > b, .icon-box b { color: var(--accent); font-weight: 400; }
   .chip.boxed { box-shadow: inset 0 0 0 3px transparent; }
   .chip.ok { color: var(--ok); } .chip.ok > b { color: var(--ok); }
@@ -532,6 +673,13 @@ const STYLE = `
     background: var(--ok); box-shadow: 0 0 0 2px #fff;
   }
   .avatar i.bad { background: var(--bad); }
+  .avatar.photo {
+    width: 84px; height: 84px; border-radius: 16px; background: var(--photo-bg);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 0 calc(22px * var(--glow)) rgba(56, 198, 232, .25);
+  }
+  .avatar.photo img { width: 100%; height: 100%; object-fit: contain; border-radius: 16px; }
+  .avatar.photo i { right: -3px; bottom: -3px; width: 10px; height: 10px; box-shadow: 0 0 0 2px #0f1923; }
+  .is-offline .photo img { filter: grayscale(1); opacity: .6; }
   .name { font-weight: 700; font-size: 14px; }
   .model { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .clients { font-size: 12px; margin-top: 8px; color: var(--muted); display: inline-flex; gap: 6px; align-items: baseline; }
@@ -549,6 +697,8 @@ const STYLE = `
     width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
     border: 1px solid var(--card-border); background: rgba(56, 198, 232, .06); font-size: 13px;
   }
+  .icon-box.photo { width: 52px; height: 52px; padding: 2px; background: var(--photo-bg); border-radius: 10px; }
+  .icon-box.photo img { width: 100%; height: 100%; object-fit: contain; }
   .spacer { flex: 1; }
   .muted { color: var(--muted); }
   .small { font-size: 11px; }
@@ -589,16 +739,41 @@ const STYLE = `
   .info:hover { color: var(--text); border-color: var(--accent); }
   .client-list {
     margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); text-align: left;
-    display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto;
+    display: flex; flex-direction: column; gap: 2px; overflow: auto;
   }
   .panel .client-list { margin: 0; padding: 8px 14px 10px; }
   .client-row {
     display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer;
   }
   .client-row:hover { background: rgba(56, 198, 232, .08); }
-  .client-row i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .client-row i { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: flex-start; margin-top: 5px; }
+  .client-row .cbody { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .client-row .cline { display: flex; gap: 8px; align-items: baseline; }
   .client-row .cname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .client-row .cmeta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .client-row .ip {
+    border: 0; background: transparent; padding: 1px 4px; margin: 0; border-radius: 4px; cursor: copy;
+    font: inherit; font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .client-row .ip:hover { color: var(--accent); background: rgba(56, 198, 232, .1); }
+  .client-row .ip.copied { color: var(--ok); }
+  .client-row .rssi { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .client-row .cmeta {
+    color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .client-row .cmeta .part { white-space: nowrap; }
+  b.down { color: var(--ok); }
+  b.up { color: var(--bad); }
+  .radios { margin: 2px 0 8px; padding: 6px 6px 8px; border-bottom: 1px solid var(--line); font-size: 11px; }
+  .radio-row { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1.1fr 1.3fr; gap: 6px; padding: 2px 0; align-items: center; }
+  .panel .radio-row { max-width: 460px; }
+  .radio-row.head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
+  .radio-row .rband { font-weight: 600; }
+  .radio-row .rband.b5G, .radio-row .rband.b6G { color: var(--ok); }
+  .radio-row .load {
+    display: inline-block; width: 22px; height: 5px; border-radius: 3px; margin-right: 5px; vertical-align: middle;
+    background: linear-gradient(90deg, var(--accent) var(--load), var(--line) var(--load));
+  }
+  .radios .hint { color: var(--muted); font-size: 10px; margin-top: 4px; }
   .empty-list { color: var(--muted); font-size: 12px; text-align: center; }
   .wrap.compact .stage { padding-left: 24px; gap: 22px; }
   .wrap.compact .device { width: 100%; }
