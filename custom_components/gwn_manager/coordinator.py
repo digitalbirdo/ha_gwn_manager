@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from dataclasses import dataclass, field
+from itertools import permutations
+from math import perm
 from datetime import datetime, timedelta
 import logging
 import re
@@ -142,6 +145,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._wired: dict[str, dict[str, Any]] = {}
         # Router MAC -> (WAN rx bytes, WAN tx bytes, time) for the WAN throughput
         self._wan_samples: dict[str, tuple[int, int, datetime]] = {}
+        # Router MAC -> (download bit/s, upload bit/s)
+        self._wan_rates: dict[str, tuple[float, float]] = {}
         self.client = GWNClient(
             async_get_clientsession(hass, verify_ssl=entry.data.get(CONF_VERIFY_SSL, True)),
             entry.data[CONF_SERVER_URL],
@@ -194,9 +199,105 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             rates = self._rates.get(mac) if client["connected"] else None
             client["uploadRate"], client["downloadRate"] = rates or (None, None)
 
+        self._detect_device_uplinks(data)
         self._apply_manual_uplinks(data)
         self._detect_events(data)
         return data
+
+    def _detect_device_uplinks(self, data: GWNData) -> None:
+        """Guess which switch port each AP and the router are plugged into.
+
+        The API has no LLDP or MAC table, so this is derived:
+        - AP -> switch port: same link speed as the AP's uplink, and the number
+          of devices the switch sees on the port (clientCount) closest to the
+          AP's clients + the AP itself (+1 per device on its LAN port).
+        - Switch -> router: the switch port on which the router's own wireless
+          clients are seen (their "port" field); the router side is its only
+          connected LAN port.
+        """
+        for ap in data.aps.values():
+            ap.pop("uplink", None)
+        switches = [mac for mac, ap in data.aps.items() if ap.get("ports")]
+        if len(switches) != 1:
+            return  # ambiguous with several switches
+        switch_mac = switches[0]
+        ports = {
+            str(p.get("silkScreenPort")): p
+            for p in data.aps[switch_mac]["ports"]
+            if p.get("operStatus") == "up"
+        }
+
+        def port_number(text: str | None) -> str | None:
+            return text.rsplit("/", 1)[-1] if text else None
+
+        clients_per_ap = Counter(
+            (c.get("apId") or "").upper() for c in data.clients.values() if c.get("connected")
+        )
+        used: set[str] = set()
+
+        # Router uplink
+        for mac, ap in data.aps.items():
+            if ap.get("deviceType") != "ROUTER":
+                continue
+            seen = Counter(
+                port_number(c.get("port"))
+                for c in data.clients.values()
+                if c.get("connected") and c.get("wired") != 1
+                and (c.get("apId") or "").upper() == mac and c.get("port")
+            )
+            seen_on = [port for port, _ in seen.most_common() if port in ports]
+            lan_up = [
+                p.get("silkScreenPort")
+                for p in ap.get("info", {}).get("portInfo") or []
+                if p.get("linkStatus") == "1" and p.get("role") != "1"
+            ]
+            if seen_on and len(lan_up) == 1:
+                ap["uplink"] = {"parent": mac, "port": lan_up[0], "ownPort": seen_on[0], "source": "auto"}
+                # Stored on the switch: the switch is the child of the router.
+                data.aps[switch_mac]["uplink"] = ap.pop("uplink")
+                used.add(seen_on[0])
+
+        # AP uplinks
+        candidates = []
+        for mac, ap in data.aps.items():
+            links = (ap.get("details") or {}).get("linkSpeed") or []
+            if mac == switch_mac or ap.get("deviceType") == "ROUTER" or not links:
+                continue
+            speed = next((l.get("value1") for l in links if l.get("status") == "connected"), None)
+            lan_devices = sum(1 for l in links[1:] if l.get("status") == "connected")
+            expected = clients_per_ap.get(mac, 0) + 1 + lan_devices
+            candidates.append((mac, speed, expected))
+        if not candidates or len(candidates) > 7:
+            return
+        speeds = {speed for _, speed, _ in candidates}
+        free = [
+            label
+            for label, port in ports.items()
+            if label not in used and port.get("operSpeed") in speeds
+        ]
+
+        def cost(mac_expected: int, port: str) -> int:
+            return abs(int(ports[port].get("clientCount") or 0) - mac_expected)
+
+        assignment: dict[str, str] = {}
+        if len(free) >= len(candidates) and perm(len(free), len(candidates)) <= 50_000:
+            best: tuple[int, tuple[str, ...]] | None = None
+            for combo in permutations(free, len(candidates)):
+                if any(ports[port].get("operSpeed") != speed for (_, speed, _), port in zip(candidates, combo)):
+                    continue
+                total = sum(cost(expected, port) for (_, _, expected), port in zip(candidates, combo))
+                if best is None or total < best[0]:
+                    best = (total, combo)
+            if best:
+                assignment = {mac: port for (mac, _, _), port in zip(candidates, best[1])}
+        else:
+            # Too many combinations: assign greedily, busiest AP first.
+            for mac, speed, expected in sorted(candidates, key=lambda c: -c[2]):
+                options = [p for p in free if p not in assignment.values() and ports[p].get("operSpeed") == speed]
+                if options:
+                    assignment[mac] = min(options, key=lambda p: cost(expected, p))
+        for mac, port in assignment.items():
+            data.aps[mac]["uplink"] = {"parent": switch_mac, "port": port, "ownPort": None, "source": "auto"}
 
     def _apply_manual_uplinks(self, data: GWNData) -> None:
         """Override the device a client is attached to, e.g. behind an AP's LAN port.
@@ -233,6 +334,16 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
 
         for client_ref, device_ref, port in rules:
             if (device_mac := find_device(device_ref)) is None:
+                continue
+            if (child_mac := find_device(client_ref)) is not None:
+                # A network device, e.g. "AP UG = Switch:23".
+                own = (data.aps[child_mac].get("uplink") or {}).get("ownPort")
+                data.aps[child_mac]["uplink"] = {
+                    "parent": device_mac,
+                    "port": port,
+                    "ownPort": own,
+                    "source": "manual",
+                }
                 continue
             for client_mac in find_clients(client_ref):
                 client = data.clients[client_mac]
@@ -369,12 +480,19 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             return
         now = dt_util.utcnow()
         previous = self._wan_samples.get(mac)
-        self._wan_samples[mac] = (rx, tx, now)
-        if previous and rx >= previous[0] and tx >= previous[1]:
+        if previous is None or rx < previous[0] or tx < previous[1]:
+            self._wan_samples[mac] = (rx, tx, now)
+        elif (rx, tx) != previous[:2]:
+            # The router refreshes its counters less often than we poll; only
+            # compute a new rate when they changed and keep it until then.
             elapsed = (now - previous[2]).total_seconds()
             if elapsed > 0:
-                ap["wan"]["downloadRate"] = (rx - previous[0]) * 8 / elapsed
-                ap["wan"]["uploadRate"] = (tx - previous[1]) * 8 / elapsed
+                self._wan_rates[mac] = ((rx - previous[0]) * 8 / elapsed, (tx - previous[1]) * 8 / elapsed)
+            self._wan_samples[mac] = (rx, tx, now)
+        elif (now - previous[2]).total_seconds() > 3 * THROUGHPUT_IDLE_AFTER:
+            self._wan_rates[mac] = (0.0, 0.0)
+        if (rates := self._wan_rates.get(mac)) is not None:
+            ap["wan"]["downloadRate"], ap["wan"]["uploadRate"] = rates
 
     async def _fetch_full(self) -> GWNData:
         """Fetch everything except the live client values."""

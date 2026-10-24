@@ -19,7 +19,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.4";
+const VERSION = "0.5.5";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -194,10 +194,19 @@ class GwnNetworkCard extends HTMLElement {
 
     for (const net of networks) {
       const root = upsert(`net:${net.entry_id}`, "root", { name: net.title });
+      // Devices hang off their physical uplink (switch/router) if known,
+      // otherwise off the GWN Manager.
+      const apNodes = new Map();
+      for (const ap of net.aps) apNodes.set(ap.mac, upsert(`ap:${ap.mac}`, "ap", ap, root));
       for (const ap of net.aps) {
-        const node = upsert(`ap:${ap.mac}`, "ap", ap, root);
+        const parent = ap.uplink?.parent && apNodes.get(ap.uplink.parent);
         links.push({
-          source: root, target: node, length: this._config.show_labels ? 210 : 150, strength: 1,
+          source: parent || root,
+          target: apNodes.get(ap.mac),
+          length: parent ? (this._config.show_labels ? 170 : 120) : this._config.show_labels ? 210 : 150,
+          strength: 1,
+          lan: Boolean(parent),
+          port: parent ? ap.uplink.port : null,
         });
       }
       for (const client of net.clients) {
@@ -416,7 +425,8 @@ class GwnNetworkCard extends HTMLElement {
         svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
         svg.panning { cursor: grabbing; }
         .link { stroke-linecap: round; filter: var(--gwn-link-filter); }
-        .link.backbone { stroke: var(--gwn-backbone); }
+        .link.backbone { stroke: var(--gwn-backbone); stroke-dasharray: 2 6; }
+        .link.lan { stroke: #38c6e8; stroke-opacity: .75; }
         .link.offline { stroke-dasharray: 3 4; opacity: .35; }
         .floor rect { fill: var(--gwn-floor-b); }
         .floor:nth-child(odd) rect { fill: var(--gwn-floor-a); }
@@ -672,7 +682,7 @@ class GwnNetworkCard extends HTMLElement {
     this._links.forEach((link, i) => {
       const line = this._linkElements[i];
       const isClient = link.target.type === "client";
-      line.setAttribute("class", `link${isClient ? "" : " backbone"}${link.offline ? " offline" : ""}`);
+      line.setAttribute("class", `link${isClient ? "" : link.lan ? " lan" : " backbone"}${link.offline ? " offline" : ""}`);
       if (isClient) line.setAttribute("stroke", this._clientColor(link.target.data));
       else line.removeAttribute("stroke");
       line.setAttribute("stroke-width", isClient ? 1.5 : 3);

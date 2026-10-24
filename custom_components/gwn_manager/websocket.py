@@ -100,6 +100,8 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "bands": bands.get(mac, {}),
                 "ports": _ports(ap),
                 "wan": ap.get("wan"),
+                # Physical uplink {parent, port, ownPort, source}, detected or manual
+                "uplink": ap.get("uplink"),
             }
         )
 

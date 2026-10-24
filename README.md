@@ -62,6 +62,10 @@ Hover for details, click to open the device tracker / AP status.
 
 ## Network topology card
 
+Uplinks (which switch port each AP and the router are plugged into) are detected automatically –
+the GWN API has no LLDP/MAC table, so they are derived from link speeds and device counts per port.
+Override them in the integration options (`AP = Switch:17`) or on the card.
+
 A structured view in the style of UniFi dashboards: access points with clients per band,
 switches with their ports (speed, PoE, what is connected), the internet gateway with WAN
 throughput, and uplink wires between them.
@@ -71,7 +75,7 @@ type: custom:gwn-topology-card
 title: Mein Netzwerk     # optional
 appearance: auto         # auto, dark or light
 show_all_ports: false    # also show switch ports without link
-uplinks:                 # which port each device is plugged into – the GWN API doesn't report it
+uplinks:                 # optional override – the integration detects uplinks itself
   Living Room AP: Switch:17  # "<device>:<port>", or only the port number if there is one switch
   Office AP: 21
   Switch: Gateway:LAN1

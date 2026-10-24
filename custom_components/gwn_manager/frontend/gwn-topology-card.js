@@ -17,7 +17,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.4";
+const TOPOLOGY_VERSION = "0.5.5";
 const RESUBSCRIBE_MS = 90_000;
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
@@ -169,6 +169,13 @@ class GwnTopologyCard extends HTMLElement {
       return { device: null, port: value };
     };
     const result = {};
+    // Uplinks detected by the integration (or set in its options) ...
+    for (const d of devices) {
+      if (d.uplink?.parent && d.uplink.port) {
+        result[d.mac] = { parent: d.uplink.parent, port: String(d.uplink.port), ownPort: d.uplink.ownPort ?? null };
+      }
+    }
+    // ... overridden by the card configuration.
     for (const [key, target] of Object.entries(this._config.uplinks || {})) {
       const child = resolve(key);
       if (!child.device) continue;
@@ -195,7 +202,15 @@ class GwnTopologyCard extends HTMLElement {
     this._compact = this._isCompact();
     const switches = devices.filter((d) => d.type === "SWITCH");
     const routers = devices.filter((d) => d.type === "ROUTER" || d.wan);
-    const aps = devices.filter((d) => !switches.includes(d) && !routers.includes(d));
+    // Sorted by the port they are plugged into, so the wires don't cross.
+    const portKey = (d) => {
+      const port = uplinks[d.mac]?.port;
+      const n = parseInt(port, 10);
+      return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+    };
+    const aps = devices
+      .filter((d) => !switches.includes(d) && !routers.includes(d))
+      .sort((a, b) => portKey(a) - portKey(b) || a.name.localeCompare(b.name));
     const connected = clients.filter((c) => c.connected).length;
     const wan = routers.find((r) => r.wan)?.wan;
     const wireColor = new Map(Object.keys(uplinks).map((mac, i) => [mac, WIRE_COLORS[i % WIRE_COLORS.length]]));
