@@ -23,3 +23,14 @@ MIN_PRESENCE_INTERVAL = 5
 # phones briefly dropping Wi-Fi in standby don't flap.
 DEFAULT_AWAY_DELAY = 180
 DEFAULT_TRACK_OFFLINE = True
+
+CONF_SSID_FILTER = "ssid_filter"
+
+# Fired on the event bus, also shown in the logbook.
+EVENT_CLIENT_CONNECTED = f"{DOMAIN}_client_connected"
+EVENT_CLIENT_DISCONNECTED = f"{DOMAIN}_client_disconnected"
+EVENT_CLIENT_ROAMED = f"{DOMAIN}_client_roamed"
+
+# Byte counters of connected clients are refreshed by GWN Manager about every
+# 90 s. If they did not change for this long, the client is idle.
+THROUGHPUT_IDLE_AFTER = 240

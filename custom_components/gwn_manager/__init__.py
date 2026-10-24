@@ -23,9 +23,13 @@ CARD_PATH = Path(__file__).parent / "frontend" / "gwn-network-card.js"
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.DEVICE_TRACKER,
+    Platform.EVENT,
+    Platform.IMAGE,
     Platform.SENSOR,
     Platform.SWITCH,
+    Platform.UPDATE,
 ]
 
 
@@ -94,8 +98,11 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Allow removing devices that the GWN Manager no longer reports."""
     data = entry.runtime_data.data
+    current = {
+        *data.clients,
+        *data.aps,
+        *(f"ssid_{entry.entry_id}_{key}" for key in data.ssids),
+    }
     return not any(
-        identifier[0] == DOMAIN
-        and (identifier[1] in data.clients or identifier[1] in data.aps)
-        for identifier in device.identifiers
+        identifier[0] == DOMAIN and identifier[1] in current for identifier in device.identifiers
     )

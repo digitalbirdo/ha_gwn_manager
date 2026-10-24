@@ -41,13 +41,15 @@
           "presence_interval": "Intervall für Anwesenheit",
           "away_delay": "Abwesend nach",
           "scan_interval": "Intervall für alle übrigen Daten",
-          "track_offline_clients": "Offline-Clients einbeziehen"
+          "track_offline_clients": "Offline-Clients einbeziehen",
+          "ssid_filter": "Nur Clients dieser SSIDs verfolgen"
         },
         "data_description": {
           "presence_interval": "Wie oft geprüft wird, welche Clients verbunden sind. Verbinden und Trennen erscheinen im GWN Manager sofort.",
           "away_delay": "Ein Client gilt erst als abwesend, wenn er so lange getrennt ist – damit Handys mit kurz abgeschaltetem WLAN nicht ständig wechseln. 0 = sofort.",
           "scan_interval": "Offline-Clients, Geräte und Gerätedetails. Der GWN Manager aktualisiert Signalstärke und andere Messwerte nur etwa alle 90 s.",
-          "track_offline_clients": "Entitäten für alle dem GWN Manager bekannten Clients anlegen, nicht nur für aktuell verbundene"
+          "track_offline_clients": "Entitäten für alle dem GWN Manager bekannten Clients anlegen, nicht nur für aktuell verbundene",
+          "ssid_filter": "Leer lassen, um Clients aller SSIDs zu verfolgen. Bereits angelegte Entitäten bleiben erhalten."
         }
       }
     }
@@ -56,6 +58,12 @@
     "binary_sensor": {
       "online": {
         "name": "Online"
+      },
+      "port_link": {
+        "name": "Port {port}"
+      },
+      "port_poe": {
+        "name": "Port {port} PoE"
       }
     },
     "sensor": {
@@ -136,11 +144,54 @@
       },
       "area": {
         "name": "Bereich"
+      },
+      "download_rate": {
+        "name": "Download"
+      },
+      "upload_rate": {
+        "name": "Upload"
+      },
+      "poe_power": {
+        "name": "PoE-Leistung"
+      },
+      "poe_budget": {
+        "name": "PoE-Budget"
+      },
+      "port_link_speed": {
+        "name": "Port {port} Linkgeschwindigkeit"
+      },
+      "port_download": {
+        "name": "Port {port} Download"
+      },
+      "port_upload": {
+        "name": "Port {port} Upload"
+      },
+      "ssid_clients": {
+        "name": "Verbundene Clients"
       }
     },
     "switch": {
       "network_access": {
         "name": "Netzwerkzugang"
+      }
+    },
+    "image": {
+      "wifi_qr_code": {
+        "name": "WLAN-QR-Code"
+      }
+    },
+    "event": {
+      "connection": {
+        "name": "Verbindung",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "connected": "Verbunden",
+              "disconnected": "Getrennt",
+              "roamed": "AP gewechselt"
+            }
+          }
+        }
       }
     }
   }

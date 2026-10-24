@@ -19,6 +19,7 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfDataRate,
     UnitOfInformation,
+    UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -31,9 +32,13 @@ from .coordinator import GWNConfigEntry, GWNCoordinator, parse_timestamp
 from .entity import (
     GWNAPEntity,
     GWNClientEntity,
+    GWNPortEntity,
+    GWNSSIDEntity,
     async_client_area,
     async_setup_ap_entities,
     async_setup_client_entities,
+    async_setup_port_entities,
+    async_setup_ssid_entities,
 )
 
 PARALLEL_UPDATES = 0
@@ -76,6 +81,48 @@ def _number(value: Any, maximum: float | None = None) -> float | None:
 
 def _detail(key: str, maximum: float | None = None) -> Callable[[dict[str, Any]], float | None]:
     return lambda ap: _number(ap.get("details", {}).get(key), maximum)
+
+
+def _info(key: str, maximum: float | None = None) -> Callable[[dict[str, Any]], float | None]:
+    """Value from device/info, e.g. info["result"] = [{"key": "cpuUtilz", "value": "4%"}]."""
+
+    def value(ap: dict[str, Any]) -> float | None:
+        for item in ap.get("info", {}).get("result") or []:
+            if item.get("key") == key:
+                return _number(item.get("value"), maximum)
+        return None
+
+    return value
+
+
+def _poe(key: str) -> Callable[[dict[str, Any]], float | None]:
+    """PoE value from device/info, e.g. info["poeInfo"] = [{"key": "PoEUsePower", "value": "26.7"}]."""
+
+    def value(ap: dict[str, Any]) -> float | None:
+        for item in ap.get("info", {}).get("poeInfo") or []:
+            if item.get("key") == key and item.get("type") == 0:
+                return _number(item.get("value"))
+        return None
+
+    return value
+
+
+def _first(*fns: Callable[[dict[str, Any]], float | None]) -> Callable[[dict[str, Any]], float | None]:
+    """First value any of the functions returns, for data in different places per model."""
+
+    def value(ap: dict[str, Any]) -> float | None:
+        for fn in fns:
+            if (result := fn(ap)) is not None:
+                return result
+        return None
+
+    return value
+
+
+def _memory(ap: dict[str, Any]) -> float | None:
+    # Switches report "0 MB" in the device details, the real value in device/info.
+    return _detail("usedMemory")(ap) or _info("usedMemory")(ap)
+
 
 
 def _radio(band: str, key: str) -> Callable[[dict[str, Any]], float | None]:
@@ -188,6 +235,26 @@ CLIENT_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
         value_fn=lambda client: client.get("rxBytes"),
     ),
     GWNSensorEntityDescription(
+        key="download_rate",
+        translation_key="download_rate",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.BITS_PER_SECOND,
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda client: client.get("downloadRate"),
+    ),
+    GWNSensorEntityDescription(
+        key="upload_rate",
+        translation_key="upload_rate",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.BITS_PER_SECOND,
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda client: client.get("uploadRate"),
+    ),
+    GWNSensorEntityDescription(
         key="ip_address",
         translation_key="ip_address",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -247,8 +314,8 @@ AP_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=_detail("cpuUsage", maximum=100),
-        exists_fn=_has(_detail("cpuUsage", maximum=100)),
+        value_fn=_first(_detail("cpuUsage", maximum=100), _info("cpuUtilz", maximum=100)),
+        exists_fn=_has(_first(_detail("cpuUsage", maximum=100), _info("cpuUtilz", maximum=100))),
     ),
     GWNSensorEntityDescription(
         key="memory_used",
@@ -258,9 +325,27 @@ AP_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        value_fn=_detail("usedMemory"),
-        # Switches report "0 MB".
-        exists_fn=_has(_detail("usedMemory"), allow_zero=False),
+        value_fn=_memory,
+        exists_fn=_has(_memory, allow_zero=False),
+    ),
+    GWNSensorEntityDescription(
+        key="poe_power",
+        translation_key="poe_power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_poe("PoEUsePower"),
+        exists_fn=_has(_poe("PoEUsePower")),
+    ),
+    GWNSensorEntityDescription(
+        key="poe_budget",
+        translation_key="poe_budget",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_poe("PoEPowerSupply"),
+        exists_fn=_has(_poe("PoEPowerSupply")),
     ),
     *(
         GWNSensorEntityDescription(
@@ -288,6 +373,40 @@ AP_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
 )
 
 
+PORT_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
+    GWNSensorEntityDescription(
+        key="link_speed",
+        translation_key="port_link_speed",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        entity_registry_enabled_default=False,
+        value_fn=lambda port: _number(port.get("operSpeed")) if port.get("operStatus") == "up" else 0,
+    ),
+    GWNSensorEntityDescription(
+        key="download",
+        translation_key="port_download",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.BITS_PER_SECOND,
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda port: _number(port.get("inRate")),
+    ),
+    GWNSensorEntityDescription(
+        key="upload",
+        translation_key="port_upload",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.BITS_PER_SECOND,
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda port: _number(port.get("outRate")),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: GWNConfigEntry,
@@ -310,6 +429,18 @@ async def async_setup_entry(
             for description in AP_SENSORS
             if description.exists_fn(coordinator.data.aps[mac])
         ],
+    )
+    async_setup_port_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, mac, port_id: [
+            GWNPortSensor(coordinator, mac, port_id, description) for description in PORT_SENSORS
+        ],
+    )
+    async_setup_ssid_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, key: [GWNSSIDClientsSensor(coordinator, key)],
     )
 
 
@@ -365,3 +496,44 @@ class GWNAPSensor(GWNAPEntity, SensorEntity):
     @property
     def native_value(self) -> StateType | datetime:
         return self.entity_description.value_fn(self.ap)
+
+
+class GWNPortSensor(GWNPortEntity, SensorEntity):
+    """A sensor of a switch port."""
+
+    entity_description: GWNSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: GWNCoordinator,
+        mac: str,
+        port_id: str,
+        description: GWNSensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, mac, port_id, description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> StateType | datetime:
+        return self.entity_description.value_fn(self.port)
+
+
+class GWNSSIDClientsSensor(GWNSSIDEntity, SensorEntity):
+    """Number of clients connected to an SSID."""
+
+    _attr_translation_key = "ssid_clients"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: GWNCoordinator, key: str) -> None:
+        super().__init__(coordinator, key, "clients")
+
+    @property
+    def native_value(self) -> int:
+        ssid = self.ssid
+        return sum(
+            1
+            for client in self.coordinator.data.clients.values()
+            if client["connected"]
+            and client.get("ssid") == ssid.get("ssidName")
+            and client.get("networkId") == ssid.get("networkId")
+        )

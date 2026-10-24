@@ -21,6 +21,15 @@ for every device connected to your GWN access points.
   temperature, CPU usage, channel utilization per band (disabled by default: memory, channel per band);
   sensors are only created for values the device model reports
 - Timestamps are interpreted in the time zone configured for the GWN network
+- **Throughput** per client (download / upload), derived from the byte counters
+- **Connection events** – connected, disconnected, roamed – on the event bus
+  (`gwn_manager_client_connected`, `gwn_manager_client_disconnected`, `gwn_manager_client_roamed`),
+  in the logbook and as event entity per client (disabled by default)
+- **Switches**: link and PoE state per port, port link speed and throughput (disabled by default),
+  total PoE power, CPU and memory
+- **Firmware update** entity per device (installs the version GWN Manager recommends) and a **restart** button
+- **SSIDs** as devices with the number of connected clients and a **Wi-Fi QR code** image
+  (contains the password, so disabled by default)
 - New clients and devices are added automatically
 - Works with a local GWN Manager (self-signed certificates supported) and GWN.Cloud
 - Diagnostics download with credentials redacted
@@ -74,6 +83,7 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
   this long, so phones briefly dropping Wi-Fi in standby don't flap. Arrivals are reported immediately.
 - **Update interval for all other data** (default 90 s): offline clients, devices and device details.
   GWN Manager itself refreshes signal strength and other measurements only about every 90 s.
+- **Only track clients of these SSIDs** (default: all)
 - **Track offline clients**: create entities for all clients known to GWN Manager, not only for currently connected ones
 
 ## API notes
@@ -93,3 +103,24 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 HACS installs the integration directly from the tagged sources. (Zip release assets are not
 used: GitHub's release download redirect currently sends a header larger than aiohttp
 accepts, so HACS cannot download them.)
+
+## Events
+
+Example automation trigger:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: gwn_manager_client_roamed
+    event_data:
+      mac: "AA:BB:CC:DD:EE:FF"
+```
+
+Event data: `mac`, `name`, `ip`, `ssid`, `ap_mac`, `ap_name` and, for roaming,
+`previous_ap_mac` / `previous_ap_name`. Disconnects are reported immediately; the device
+tracker applies *Consider away after*.
+
+## Limitations
+
+- PoE can't be switched per port: the GWN API has no PoE setting for switch ports.
+- Throughput and other measurements are refreshed by GWN Manager about every 90 seconds.

@@ -184,6 +184,35 @@ class GWNClient:
         """
         return await self._post("/v2.0.0/ap/info", {"mac": [mac]}) or {}
 
+    async def get_device_info(self, network_id: int, mac: str) -> dict[str, Any]:
+        """Return device info including type, PoE budget and, for switches, CPU/memory."""
+        return await self._post("/v1.0.0/device/info", {"networkId": network_id, "mac": mac}) or {}
+
+    async def get_switch_ports(self, network_id: int, mac: str) -> list[dict[str, Any]]:
+        """Return the ports of a switch (link, rates in bit/s, PoE state)."""
+        return await self._post("/v1.0.0/switch/port/info", {"networkId": network_id, "mac": mac}) or []
+
+    async def get_firmware_versions(self, network_id: int) -> list[dict[str, Any]]:
+        """Return current and recommended firmware of each device."""
+        data = await self._post("/v1.0.0/upgrade/version", {"networkId": network_id}) or {}
+        return data.get("result") or []
+
+    async def upgrade_device(self, mac: str) -> None:
+        """Upgrade a device to the recommended firmware."""
+        await self._post("/v1.0.0/upgrade/add", {"macs": [mac]})
+
+    async def reboot_device(self, mac: str) -> None:
+        """Reboot a device."""
+        await self._post("/v1.0.0/ap/reboot", {"mac": [mac]})
+
+    async def get_ssids(self, network_id: int) -> list[dict[str, Any]]:
+        """Return the SSIDs of a network."""
+        return await self._post_paged("/v1.0.0/ssid/list", {"networkId": network_id})
+
+    async def get_ssid_configuration(self, ssid_id: int) -> dict[str, Any]:
+        """Return the configuration of an SSID, including its key."""
+        return await self._post("/v1.0.0/ssid/configuration", {"id": ssid_id}) or {}
+
     async def set_client_blocked(self, network_id: int, mac: str, blocked: bool) -> None:
         """Block or unblock a client."""
         await self._post(

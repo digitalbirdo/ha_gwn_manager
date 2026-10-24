@@ -41,13 +41,15 @@
           "presence_interval": "Presence update interval",
           "away_delay": "Consider away after",
           "scan_interval": "Update interval for all other data",
-          "track_offline_clients": "Track offline clients"
+          "track_offline_clients": "Track offline clients",
+          "ssid_filter": "Only track clients of these SSIDs"
         },
         "data_description": {
           "presence_interval": "How often to check which clients are connected. Connects and disconnects show up in GWN Manager right away.",
           "away_delay": "A client is only reported away after being disconnected this long, so phones briefly dropping Wi-Fi don't flap. 0 = immediately.",
           "scan_interval": "Offline clients, devices and device details. GWN Manager refreshes signal strength and other measurements only every ~90 s.",
-          "track_offline_clients": "Create entities for all clients known to GWN Manager, not only for currently connected ones"
+          "track_offline_clients": "Create entities for all clients known to GWN Manager, not only for currently connected ones",
+          "ssid_filter": "Leave empty to track clients of all SSIDs. Entities of clients that are already set up are kept."
         }
       }
     }
@@ -56,6 +58,12 @@
     "binary_sensor": {
       "online": {
         "name": "Online"
+      },
+      "port_link": {
+        "name": "Port {port}"
+      },
+      "port_poe": {
+        "name": "Port {port} PoE"
       }
     },
     "sensor": {
@@ -136,11 +144,54 @@
       },
       "area": {
         "name": "Area"
+      },
+      "download_rate": {
+        "name": "Download"
+      },
+      "upload_rate": {
+        "name": "Upload"
+      },
+      "poe_power": {
+        "name": "PoE power"
+      },
+      "poe_budget": {
+        "name": "PoE budget"
+      },
+      "port_link_speed": {
+        "name": "Port {port} link speed"
+      },
+      "port_download": {
+        "name": "Port {port} download"
+      },
+      "port_upload": {
+        "name": "Port {port} upload"
+      },
+      "ssid_clients": {
+        "name": "Connected clients"
       }
     },
     "switch": {
       "network_access": {
         "name": "Network access"
+      }
+    },
+    "image": {
+      "wifi_qr_code": {
+        "name": "Wi-Fi QR code"
+      }
+    },
+    "event": {
+      "connection": {
+        "name": "Connection",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "connected": "Connected",
+              "disconnected": "Disconnected",
+              "roamed": "Roamed"
+            }
+          }
+        }
       }
     }
   }

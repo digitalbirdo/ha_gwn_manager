@@ -16,6 +16,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -28,6 +31,7 @@ from .const import (
     CONF_AWAY_DELAY,
     CONF_PRESENCE_INTERVAL,
     CONF_SERVER_URL,
+    CONF_SSID_FILTER,
     CONF_TRACK_OFFLINE,
     DEFAULT_AWAY_DELAY,
     DEFAULT_PRESENCE_INTERVAL,
@@ -145,6 +149,17 @@ class GWNConfigFlow(ConfigFlow, domain=DOMAIN):
 class GWNOptionsFlow(OptionsFlow):
     """Polling interval and which clients to track."""
 
+    def _ssid_names(self) -> list[str]:
+        """SSIDs currently known to the GWN Manager, plus the selected ones."""
+        names = set(self.config_entry.options.get(CONF_SSID_FILTER, []))
+        if (coordinator := getattr(self.config_entry, "runtime_data", None)) is not None:
+            names.update(
+                ssid["ssidName"]
+                for ssid in coordinator.data.ssids.values()
+                if ssid.get("ssidName")
+            )
+        return sorted(names)
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -175,6 +190,16 @@ class GWNOptionsFlow(OptionsFlow):
                         CONF_TRACK_OFFLINE,
                         default=options.get(CONF_TRACK_OFFLINE, DEFAULT_TRACK_OFFLINE),
                     ): bool,
+                    vol.Optional(
+                        CONF_SSID_FILTER, default=options.get(CONF_SSID_FILTER, [])
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=self._ssid_names(),
+                            multiple=True,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            custom_value=True,
+                        )
+                    ),
                 }
             ),
         )

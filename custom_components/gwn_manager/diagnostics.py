@@ -19,6 +19,9 @@ TO_REDACT = {
     "socialName",
     "longitude",
     "latitude",
+    "ssidWpaKey",
+    "ssidWepKey",
+    "ppskProfile",
 }
 
 
