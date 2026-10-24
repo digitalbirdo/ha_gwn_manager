@@ -1,4 +1,4 @@
-"""Config flow for Grandstream GWN Cloud/Manager integration."""
+"""Config flow for Grandstream GWN Manager integration."""
 from __future__ import annotations
 from .gwn_manager_api import GWNClient
 
@@ -44,11 +44,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     #     raise InvalidAuth
 
     # Return info that you want to store in the config entry.
-    return {"title": "Grandstream GWN"}
+    return {"title": "GWN Manager"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Grandstream GWN Cloud/Manager."""
+    """Handle a config flow for Grandstream GWN Manager."""
 
     VERSION = 1
 

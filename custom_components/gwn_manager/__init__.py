@@ -1,4 +1,4 @@
-"""The Grandstream GWN Cloud/Manager integration."""
+"""The Grandstream GWN Manager integration."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -19,10 +19,15 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Grandstream GWN Cloud/Manager from a config entry."""
+    """Set up Grandstream GWN Manager from a config entry."""
 
     hass.data.setdefault(DOMAIN, {})
 
+    #api = GWNManagerAPI(
+    #    server_url=entry.data[CONF_SERVER_URL],
+    #    app_id=entry.data[CONF_APP_ID],
+    #    app_secret=entry.data[CONF_APP_SECRET],
+    #)
 
     client = GWNClient(entry.data[CONF_APP_ID], entry.data[CONF_APP_SECRET], entry.data[CONF_SERVER_URL])
     client.authenticate()

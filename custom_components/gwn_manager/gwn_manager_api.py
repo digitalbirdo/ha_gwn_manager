@@ -28,7 +28,7 @@ class GWNClient:
         }
         
         try:
-            response = httpx.post(auth_url, data=payload, timeout=10.0)
+            response = httpx.post(auth_url, data=payload, timeout=10.0, verify=False)
             response.raise_for_status()
 
             data = response.json()
@@ -119,9 +119,9 @@ class GWNClient:
         try:
             headers = self.get_headers()
             if method.upper() == "POST":
-                response = httpx.post(url, headers=headers, params=query_params, json=json_data, timeout=15.0)
+                response = httpx.post(url, headers=headers, params=query_params, json=json_data, timeout=15.0, verify=False)
             else:
-                response = httpx.get(url, headers=headers, params=query_params, timeout=10.0)
+                response = httpx.get(url, headers=headers, params=query_params, timeout=10.0, verify=False)
 
             response.raise_for_status()
             return response.json()

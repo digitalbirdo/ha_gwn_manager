@@ -1,4 +1,4 @@
-"""Sensor platform for Grandstream GWN Cloud/Manager."""
+"""Sensor platform for Grandstream GWN Manager."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import (
@@ -28,7 +28,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the GWN Cloud/Manager sensors for clients and APs as dedicated devices."""
+    """Set up the GWN Manager sensors for clients and APs as dedicated devices."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = []
