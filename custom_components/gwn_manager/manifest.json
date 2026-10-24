@@ -1,6 +1,10 @@
 {
   "domain": "gwn_manager",
   "name": "GWN Manager",
+  "categories": [
+    "computers_network.routers_network",
+    "presence_location.network_presence"
+  ],
   "codeowners": [
     "@digitalbirdo"
   ],
