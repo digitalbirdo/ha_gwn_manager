@@ -1,6 +1,7 @@
 """Data update coordinator for the GWN Manager integration."""
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
@@ -41,19 +42,22 @@ class GWNData:
     clients: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-def parse_timestamp(value: Any) -> datetime | None:
-    """Parse the different timestamp formats the API returns."""
+def parse_timestamp(value: Any, time_zone: str | None = None) -> datetime | None:
+    """Parse the different timestamp formats the API returns.
+
+    Timestamps without offset are in the time zone of the GWN network.
+    """
     if not value or not isinstance(value, str):
         return None
+    tzinfo = (time_zone and dt_util.get_time_zone(time_zone)) or dt_util.get_default_time_zone()
     # ISO 8601, e.g. "2026-10-24T09:19:28.000+0000"
-    if (parsed := dt_util.parse_datetime(value)) is not None:
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt_util.get_default_time_zone())
-    # "2026-10-24 02:52" in the GWN Manager's (assumed: Home Assistant's) time zone
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M")
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=dt_util.get_default_time_zone())
+    if (parsed := dt_util.parse_datetime(value)) is None:
+        # e.g. "2026-10-24 02:52"
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=tzinfo)
 
 
 class GWNCoordinator(DataUpdateCoordinator[GWNData]):
@@ -77,6 +81,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             entry.data[CONF_APP_ID],
             entry.data[CONF_APP_SECRET],
         )
+        # Network time zones hardly ever change; fetch them once per setup.
+        self._time_zones: dict[int, str | None] = {}
 
     async def _async_update_data(self) -> GWNData:
         try:
@@ -90,18 +96,42 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         data = GWNData()
         for network in await self.client.get_networks():
             network_id = network["id"]
+            if network_id not in self._time_zones:
+                detail = await self.client.get_network_detail(network_id)
+                time_zone = detail.get("timezone")
+                # Loads the zone info in the executor; later sync lookups in
+                # parse_timestamp() hit the cache.
+                if time_zone and await dt_util.async_get_time_zone(time_zone) is None:
+                    time_zone = None
+                self._time_zones[network_id] = time_zone
+            time_zone = self._time_zones[network_id]
+
+            network_aps: dict[str, dict[str, Any]] = {}
             for ap in await self.client.get_access_points(network_id):
                 if mac := (ap.get("mac") or "").upper():
-                    data.aps[mac] = {**ap, "networkName": network.get("networkName")}
+                    network_aps[mac] = {**ap, "networkName": network.get("networkName")}
+            details = await asyncio.gather(
+                *(self.client.get_device_details(mac) for mac in network_aps),
+                return_exceptions=True,
+            )
+            for (mac, ap), detail in zip(network_aps.items(), details, strict=True):
+                if isinstance(detail, GWNAuthError):
+                    raise detail
+                if isinstance(detail, BaseException):
+                    # Optional data; don't fail the whole update for it.
+                    _LOGGER.debug("No details for %s: %s", mac, detail)
+                    detail = {}
+                ap["details"] = detail
+            data.aps.update(network_aps)
 
             # All known clients (incl. offline) ...
             for client in await self.client.get_clients(network_id, connected_only=False):
                 if mac := (client.get("clientId") or "").upper():
-                    data.clients[mac] = {**client, "connected": False}
+                    data.clients[mac] = {**client, "connected": False, "timeZone": time_zone}
             # ... overlaid with the live values of the connected ones.
             for client in await self.client.get_clients(network_id, connected_only=True):
                 if mac := (client.get("clientId") or "").upper():
-                    merged = data.clients.get(mac, {})
+                    merged = data.clients.get(mac, {"timeZone": time_zone})
                     merged.update(
                         {
                             k: v

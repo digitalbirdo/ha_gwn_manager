@@ -101,6 +101,38 @@
       },
       "firmware": {
         "name": "Firmware"
+      },
+      "temperature": {
+        "name": "Temperatur"
+      },
+      "cpu_usage": {
+        "name": "CPU-Auslastung"
+      },
+      "memory_used": {
+        "name": "Belegter Speicher"
+      },
+      "channel_load_2g4": {
+        "name": "Kanalauslastung 2,4 GHz"
+      },
+      "channel_load_5g": {
+        "name": "Kanalauslastung 5 GHz"
+      },
+      "channel_load_6g": {
+        "name": "Kanalauslastung 6 GHz"
+      },
+      "channel_2g4": {
+        "name": "Kanal 2,4 GHz"
+      },
+      "channel_5g": {
+        "name": "Kanal 5 GHz"
+      },
+      "channel_6g": {
+        "name": "Kanal 6 GHz"
+      }
+    },
+    "switch": {
+      "network_access": {
+        "name": "Netzwerkzugang"
       }
     }
   }

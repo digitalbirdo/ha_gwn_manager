@@ -14,7 +14,11 @@ for every device connected to your GWN access points.
 - **Device tracker** per client (`home` / `not_home`), usable for presence and the `person` integration
 - Per-client sensors: signal strength, access point, SSID, band, last seen, IP address
   (disabled by default: connected since, channel, link rates, traffic, VLAN)
-- Per access point / switch / router: online state, connected clients, uptime, firmware, IP address
+- **Network access switch** per client (block / unblock), disabled by default
+- Per access point / switch / router: online state, connected clients, uptime, firmware, IP address,
+  temperature, CPU usage, channel utilization per band (disabled by default: memory, channel per band);
+  sensors are only created for values the device model reports
+- Timestamps are interpreted in the time zone configured for the GWN network
 - New clients and devices are added automatically
 - Works with a local GWN Manager (self-signed certificates supported) and GWN.Cloud
 - Diagnostics download with credentials redacted

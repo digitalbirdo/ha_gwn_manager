@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -13,10 +14,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
     UnitOfDataRate,
     UnitOfInformation,
+    UnitOfTemperature,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
@@ -40,6 +43,8 @@ class GWNSensorEntityDescription(SensorEntityDescription):
     """Describes a GWN sensor."""
 
     value_fn: Callable[[dict[str, Any]], StateType | datetime]
+    # Whether to create the entity at all, e.g. only for devices with the hardware.
+    exists_fn: Callable[[dict[str, Any]], bool] = lambda _: True
 
 
 def _live(key: str) -> Callable[[dict[str, Any]], Any]:
@@ -48,9 +53,47 @@ def _live(key: str) -> Callable[[dict[str, Any]], Any]:
 
 
 def _last_seen(client: dict[str, Any]) -> datetime | None:
-    if client["connected"] and (ts := parse_timestamp(client.get("lastactive"))):
+    time_zone = client.get("timeZone")
+    if client["connected"] and (ts := parse_timestamp(client.get("lastactive"), time_zone)):
         return ts
-    return parse_timestamp(client.get("lastSeen"))
+    return parse_timestamp(client.get("lastSeen"), time_zone)
+
+
+def _number(value: Any, maximum: float | None = None) -> float | None:
+    """Extract the number from values like "55℃", "9.0%" or "211 MB"."""
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str) and (match := re.search(r"-?\d+(?:\.\d+)?", value)):
+        number = float(match.group())
+    else:
+        return None
+    if maximum is not None and not 0 <= number <= maximum:
+        # Some models report nonsense, e.g. a CPU usage of "192224%".
+        return None
+    return number
+
+
+def _detail(key: str, maximum: float | None = None) -> Callable[[dict[str, Any]], float | None]:
+    return lambda ap: _number(ap.get("details", {}).get(key), maximum)
+
+
+def _radio(band: str, key: str) -> Callable[[dict[str, Any]], float | None]:
+    """Value from the per-band lists, e.g. details["g5"] = [{"key": "channel", "value": "40"}]."""
+
+    def value(ap: dict[str, Any]) -> float | None:
+        for item in ap.get("details", {}).get(band) or []:
+            if item.get("key") == key:
+                return _number(item.get("value"))
+        return None
+
+    return value
+
+
+def _has(
+    fn: Callable[[dict[str, Any]], Any], allow_zero: bool = True
+) -> Callable[[dict[str, Any]], bool]:
+    """Only create the entity if the device reports a value."""
+    return lambda ap: (value := fn(ap)) is not None and (allow_zero or value != 0)
 
 
 def _connected_since(client: dict[str, Any]) -> datetime | None:
@@ -187,6 +230,60 @@ AP_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda ap: ap.get("ipv4") or ap.get("ip") or None,
     ),
+    GWNSensorEntityDescription(
+        key="temperature",
+        translation_key="temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_detail("temperature"),
+        exists_fn=_has(_detail("temperature")),
+    ),
+    GWNSensorEntityDescription(
+        key="cpu_usage",
+        translation_key="cpu_usage",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_detail("cpuUsage", maximum=100),
+        exists_fn=_has(_detail("cpuUsage", maximum=100)),
+    ),
+    GWNSensorEntityDescription(
+        key="memory_used",
+        translation_key="memory_used",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.MEGABYTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_detail("usedMemory"),
+        # Switches report "0 MB".
+        exists_fn=_has(_detail("usedMemory"), allow_zero=False),
+    ),
+    *(
+        GWNSensorEntityDescription(
+            key=f"channel_load_{band}",
+            translation_key=f"channel_load_{band}",
+            native_unit_of_measurement=PERCENTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=_detail(f"channelload_{band}", maximum=100),
+            exists_fn=_has(_detail(f"channelload_{band}", maximum=100)),
+        )
+        for band in ("2g4", "5g", "6g")
+    ),
+    *(
+        GWNSensorEntityDescription(
+            key=f"channel_{band}",
+            translation_key=f"channel_{band}",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            entity_registry_enabled_default=False,
+            value_fn=_radio(radio, "channel"),
+            exists_fn=_has(_radio(radio, "channel"), allow_zero=False),
+        )
+        for band, radio in (("2g4", "g24"), ("5g", "g5"), ("6g", "g6"))
+    ),
 )
 
 
@@ -207,7 +304,9 @@ async def async_setup_entry(
         entry,
         async_add_entities,
         lambda coordinator, mac: [
-            GWNAPSensor(coordinator, mac, description) for description in AP_SENSORS
+            GWNAPSensor(coordinator, mac, description)
+            for description in AP_SENSORS
+            if description.exists_fn(coordinator.data.aps[mac])
         ],
     )
 

@@ -12,7 +12,7 @@ import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-API_PREFIX = "/oapi/v1.0.0"
+API_PREFIX = "/oapi"
 PAGE_SIZE = 100
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 # Renew the token a bit before it actually expires.
@@ -166,12 +166,30 @@ class GWNClient:
     async def get_networks(self) -> list[dict[str, Any]]:
         """Return all networks the app has access to."""
         return await self._post_paged(
-            "/network/list", {"type": "asc", "order": "id", "search": ""}
+            "/v1.0.0/network/list", {"type": "asc", "order": "id", "search": ""}
         )
 
     async def get_access_points(self, network_id: int) -> list[dict[str, Any]]:
         """Return all devices (APs, switches, routers) of a network."""
-        return await self._post_paged("/ap/list", {"networkId": network_id})
+        return await self._post_paged("/v1.0.0/ap/list", {"networkId": network_id})
+
+    async def get_network_detail(self, network_id: int) -> dict[str, Any]:
+        """Return details of a network, including its time zone."""
+        return await self._post("/v1.0.0/network/detail", {"id": network_id}) or {}
+
+    async def get_device_details(self, mac: str) -> dict[str, Any]:
+        """Return detailed info of a device (CPU, memory, temperature, radios, ...).
+
+        The endpoint accepts a list of MACs but only answers for the first one.
+        """
+        return await self._post("/v2.0.0/ap/info", {"mac": [mac]}) or {}
+
+    async def set_client_blocked(self, network_id: int, mac: str, blocked: bool) -> None:
+        """Block or unblock a client."""
+        await self._post(
+            "/v1.0.0/client/block",
+            {"networkId": network_id, "clientId": mac, "block": 0 if blocked else 1},
+        )
 
     async def get_clients(self, network_id: int, connected_only: bool) -> list[dict[str, Any]]:
         """Return clients of a network.
@@ -181,6 +199,6 @@ class GWNClient:
         clients are returned, including offline ones, without live values.
         """
         return await self._post_paged(
-            "/client/list",
+            "/v1.0.0/client/list",
             {"networkId": network_id, "untilNow": 0 if connected_only else 1},
         )
