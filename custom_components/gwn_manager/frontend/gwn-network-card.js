@@ -13,6 +13,8 @@
  *   animate: true            # gentle floating of the bubbles
  *   color_by: rssi           # rssi or band; can also be switched on the card
  *   appearance: auto         # auto (follows HA dark mode), dark or light
+ *   layout: auto             # floors (APs arranged by the floor of their area), free, or auto
+ *                            # (floors as soon as an AP's area is assigned to a floor)
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
@@ -70,6 +72,8 @@ class GwnNetworkCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._nodes = new Map();
     this._links = [];
+    // Floors of the APs, top floor first: [{ id, name, level }]
+    this._floors = [];
     this._alpha = 1;
     this._view = { x: 0, y: 0, k: 1 };
     this._autoFit = true;
@@ -91,6 +95,7 @@ class GwnNetworkCard extends HTMLElement {
       animate: true,
       color_by: "rssi",
       appearance: "auto",
+      layout: "auto",
       ...config,
     };
     this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
@@ -208,6 +213,8 @@ class GwnNetworkCard extends HTMLElement {
       }
     }
 
+    this._updateFloors(networks);
+
     for (const id of [...this._nodes.keys()]) {
       if (!seen.has(id)) {
         this._nodes.delete(id);
@@ -216,6 +223,44 @@ class GwnNetworkCard extends HTMLElement {
     }
     this._links = links;
     this._syncElements();
+  }
+
+  _updateFloors(networks) {
+    const floors = new Map();
+    for (const net of networks) {
+      for (const ap of net.aps) {
+        if (ap.floor_id && !floors.has(ap.floor_id)) {
+          floors.set(ap.floor_id, { id: ap.floor_id, name: ap.floor, level: ap.floor_level });
+        }
+      }
+    }
+    // Highest floor at the top; floors without a level below, by name.
+    const sorted = [...floors.values()].sort((a, b) =>
+      (b.level ?? -Infinity) - (a.level ?? -Infinity) || String(a.name).localeCompare(String(b.name)));
+    const layout = this._config.layout;
+    const useFloors = layout !== "free" && sorted.length > 0;
+    const changed = JSON.stringify(sorted) !== JSON.stringify(this._floors) || useFloors !== this._floorLayout;
+    this._floors = useFloors ? sorted : [];
+    this._floorLayout = useFloors;
+    const index = new Map(this._floors.map((f, i) => [f.id, i]));
+    for (const node of this._nodes.values()) {
+      if (node.type === "ap") node.floor = index.get(node.data.floor_id);
+    }
+    if (changed) {
+      this._alpha = 1;
+      this._syncFloors();
+    }
+  }
+
+  _floorGap() {
+    // Use the card height, but leave enough room for the client clusters.
+    const perFloor = (this._config.height - 40) / Math.max(this._floors.length, 1);
+    return Math.max(this._config.show_labels ? 210 : 160, perFloor);
+  }
+
+  _floorY(index) {
+    const cy = this._config.height / 2;
+    return cy + (index - (this._floors.length - 1) / 2) * this._floorGap();
   }
 
   // ---------------------------------------------------------- simulation
@@ -258,8 +303,29 @@ class GwnNetworkCard extends HTMLElement {
       s.vx += fx * 0.2; s.vy += fy * 0.2;
     }
 
+    if (this._floorLayout) {
+      for (const n of nodes) {
+        if (n.type === "ap" && n.floor !== undefined) {
+          // Keep APs on their floor, regardless of how settled the layout is.
+          n.vy += (this._floorY(n.floor) - n.y) * 0.08;
+        } else if (n.type === "client") {
+          // Clients move freely within their AP's floor, but stay inside its band.
+          const ap = this._nodes.get(`ap:${n.data.ap}`);
+          if (ap?.floor !== undefined) {
+            const dy = n.y - this._floorY(ap.floor);
+            const limit = this._floorGap() / 2 - 24;
+            if (Math.abs(dy) > limit) n.vy -= (dy - Math.sign(dy) * limit) * 0.2;
+          }
+        } else if (n.type === "root") {
+          // The GWN Manager sits to the left of the floors.
+          n.vx += (cx - 420 - n.x) * 0.05;
+        }
+      }
+    }
+
+    const gravityX = this._floorLayout ? GRAVITY * 0.3 : GRAVITY;
     for (const n of nodes) {
-      n.vx += (cx - n.x) * GRAVITY * alpha * (n.type === "root" ? 5 : 1);
+      n.vx += (cx - n.x) * gravityX * alpha * (n.type === "root" ? 5 : 1);
       n.vy += (cy - n.y) * GRAVITY * alpha * (n.type === "root" ? 5 : 1);
       if (this._config.animate && n.type === "client") {
         n.vx += (Math.random() - 0.5) * 0.25;
@@ -321,6 +387,8 @@ class GwnNetworkCard extends HTMLElement {
           --gwn-shadow: 0 6px 24px rgba(28, 35, 51, .14);
           --gwn-node-filter: drop-shadow(0 1px 2px rgba(28, 35, 51, .25));
           --gwn-link-filter: none;
+          --gwn-floor-a: rgba(28, 35, 51, .045);
+          --gwn-floor-b: rgba(28, 35, 51, .015);
         }
         .wrap.dark {
           --gwn-bg: radial-gradient(ellipse at 50% 35%, #1d2742 0%, #0c111d 75%);
@@ -335,6 +403,8 @@ class GwnNetworkCard extends HTMLElement {
           --gwn-shadow: 0 8px 32px rgba(0, 0, 0, .5);
           --gwn-node-filter: url(#gwn-glow);
           --gwn-link-filter: url(#gwn-glow-soft);
+          --gwn-floor-a: rgba(140, 170, 255, .07);
+          --gwn-floor-b: rgba(140, 170, 255, .025);
         }
         .title {
           position: absolute; left: 16px; top: 12px; z-index: 1;
@@ -345,6 +415,12 @@ class GwnNetworkCard extends HTMLElement {
         .link { stroke-linecap: round; filter: var(--gwn-link-filter); }
         .link.backbone { stroke: var(--gwn-backbone); }
         .link.offline { stroke-dasharray: 3 4; opacity: .35; }
+        .floor rect { fill: var(--gwn-floor-b); }
+        .floor:nth-child(odd) rect { fill: var(--gwn-floor-a); }
+        .floor text {
+          font: 600 12px var(--paper-font-body1_-_font-family, sans-serif);
+          letter-spacing: 1.5px; text-transform: uppercase; fill: var(--gwn-muted); opacity: .8;
+        }
         .node { cursor: pointer; }
         .node circle.body {
           stroke: var(--gwn-node-stroke); stroke-width: 1.5;
@@ -430,6 +506,7 @@ class GwnNetworkCard extends HTMLElement {
               </filter>
             </defs>
             <g class="viewport">
+              <g class="floors"></g>
               <g class="links"></g>
               <g class="nodes"></g>
             </g>
@@ -447,6 +524,8 @@ class GwnNetworkCard extends HTMLElement {
     this._svg = this.shadowRoot.querySelector("svg");
     this._viewport = this.shadowRoot.querySelector(".viewport");
     this._linkLayer = this.shadowRoot.querySelector(".links");
+    this._floorLayer = this.shadowRoot.querySelector(".floors");
+    this._floorElements = [];
     this._nodeLayer = this.shadowRoot.querySelector(".nodes");
     this._tooltip = this.shadowRoot.querySelector(".tooltip");
     this._elements = new Map();
@@ -460,6 +539,7 @@ class GwnNetworkCard extends HTMLElement {
     }
     this._renderLegend();
     this._setupPanZoom();
+    this._syncFloors();
     this._resize();
     if (this._nodes.size) this._syncElements();
   }
@@ -579,7 +659,46 @@ class GwnNetworkCard extends HTMLElement {
     });
   }
 
+  _syncFloors() {
+    if (!this._floorLayer) return;
+    this._floorLayer.replaceChildren();
+    this._floorElements = this._floors.map((floor) => {
+      const g = document.createElementNS(SVG_NS, "g");
+      g.setAttribute("class", "floor");
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("rx", 18);
+      const label = document.createElementNS(SVG_NS, "text");
+      label.textContent = floor.name;
+      g.append(rect, label);
+      this._floorLayer.appendChild(g);
+      return g;
+    });
+  }
+
+  _nodeBounds() {
+    let minX = Infinity, maxX = -Infinity;
+    for (const n of this._nodes.values()) {
+      minX = Math.min(minX, n.x - 60);
+      maxX = Math.max(maxX, n.x + 60);
+    }
+    return { minX, maxX };
+  }
+
   _draw() {
+    if (this._floorElements.length) {
+      const { minX, maxX } = this._nodeBounds();
+      const gap = this._floorGap();
+      this._floorElements.forEach((g, i) => {
+        const y = this._floorY(i) - gap / 2 + 6;
+        const rect = g.firstChild;
+        rect.setAttribute("x", (minX - 30).toFixed(1));
+        rect.setAttribute("y", y.toFixed(1));
+        rect.setAttribute("width", (maxX - minX + 60).toFixed(1));
+        rect.setAttribute("height", (gap - 12).toFixed(1));
+        g.lastChild.setAttribute("x", (minX - 14).toFixed(1));
+        g.lastChild.setAttribute("y", (y + 22).toFixed(1));
+      });
+    }
     for (const node of this._nodes.values()) {
       this._elements.get(node.id)?.setAttribute(
         "transform", `translate(${node.x.toFixed(1)},${node.y.toFixed(1)})`,
@@ -609,6 +728,13 @@ class GwnNetworkCard extends HTMLElement {
       maxY = Math.max(maxY, n.y + r + 10);
     }
     if (!Number.isFinite(minX)) return;
+    if (this._floorLayout && this._floors.length) {
+      const gap = this._floorGap();
+      minX -= 30;
+      maxX += 30;
+      minY = Math.min(minY, this._floorY(0) - gap / 2);
+      maxY = Math.max(maxY, this._floorY(this._floors.length - 1) + gap / 2);
+    }
     const height = this._config.height - 24; // keep the legend free
     const k = Math.min(1.5, this._width / (maxX - minX), height / (maxY - minY));
     const target = {

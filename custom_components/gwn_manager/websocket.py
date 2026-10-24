@@ -7,7 +7,7 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import area_registry as ar, entity_registry as er
+from homeassistant.helpers import area_registry as ar, entity_registry as er, floor_registry as fr
 
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry
@@ -26,18 +26,20 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     coordinator = entry.runtime_data
     ent_reg = er.async_get(hass)
     area_reg = ar.async_get(hass)
+    floor_reg = fr.async_get(hass)
 
-    def device_info(mac: str) -> tuple[str | None, str | None, str | None]:
-        """Device ID, user-given device name and area name."""
+    def device_info(mac: str) -> tuple[str | None, str | None, ar.AreaEntry | None]:
+        """Device ID, user-given device name and area."""
         device = async_get_device(hass, entry.entry_id, mac)
         if device is None:
             return None, None, None
         area = area_reg.async_get_area(device.area_id) if device.area_id else None
-        return device.id, device.name_by_user, area.name if area else None
+        return device.id, device.name_by_user, area
 
     aps = []
     for mac, ap in coordinator.data.aps.items():
         device_id, user_name, area = device_info(mac)
+        floor = floor_reg.async_get_floor(area.floor_id) if area and area.floor_id else None
         aps.append(
             {
                 "mac": mac,
@@ -47,7 +49,11 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "clients": ap.get("clients"),
                 "ip": ap.get("ipv4") or ap.get("ip"),
                 "device_id": device_id,
-                "area": area,
+                "area": area.name if area else None,
+                # Floor of the AP's area, used by the card to arrange APs by floor.
+                "floor": floor.name if floor else None,
+                "floor_id": floor.floor_id if floor else None,
+                "floor_level": floor.level if floor else None,
                 "entity_id": ent_reg.async_get_entity_id(
                     "binary_sensor", DOMAIN, f"{mac}_online"
                 ),

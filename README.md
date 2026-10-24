@@ -49,9 +49,11 @@ show_labels: true        # show client names (false: only on hover)
 animate: true            # gentle floating of the bubbles
 color_by: rssi           # rssi or band (2.4 / 5 / 6 GHz); can also be switched on the card
 appearance: auto         # auto (follows the Home Assistant dark mode), dark or light
+layout: auto             # floors, free or auto (floors as soon as an AP's area has a floor)
 ```
 
-The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background
+Assign your access points to areas and the areas to floors, and the map arranges the APs by
+floor (highest floor at the top). The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background
 to pan, double-click to fit again. Client names follow the device names you set in Home Assistant.
 Hover for details, click to open the device tracker / AP status.
 
