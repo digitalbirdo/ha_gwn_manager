@@ -13,13 +13,13 @@
  *   uplinks:                 # which port each device is plugged into (the API doesn't tell)
  *     Living Room AP: Switch:17   # "<device>:<port>", or just the port if there is one switch
  *     Office AP: 21
- *     Switch: Gateway:LAN1
+ *     Switch:1: Gateway:LAN1      # "<device>:<own port>" also draws the wire from that port
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
 const TOPOLOGY_VERSION = "0.5.0";
 const RESUBSCRIBE_MS = 90_000;
-const WIRE_COLORS = ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24", "#f472b6", "#60a5fa"];
+const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
 const TEXT = {
   en: {
@@ -58,14 +58,6 @@ function formatDuration(seconds) {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   return d ? `${d}d ${h}h` : `${h}h ${Math.floor((seconds % 3600) / 60)}m`;
-}
-
-function speedClass(port) {
-  if (!port.up) return "down";
-  if ((port.speed ?? 0) >= 2500) return "s2500";
-  if ((port.speed ?? 0) >= 1000) return "s1000";
-  if (port.speed) return "s100";
-  return "up";
 }
 
 class GwnTopologyCard extends HTMLElement {
@@ -151,7 +143,11 @@ class GwnTopologyCard extends HTMLElement {
     wrap.classList.toggle("light", !dark);
   }
 
-  /** Resolve the configured uplinks to { childMac: { parentMac, portLabel } }. */
+  /**
+   * Resolve the configured uplinks to { childMac: { parent, port, ownPort } }.
+   * Keys: "<device>" or "<device>:<own port>"; values: "<parent>:<port>" or "<port>"
+   * (the only switch). Devices may be given by name or MAC.
+   */
   _uplinks(devices) {
     const byName = new Map();
     for (const d of devices) {
@@ -159,17 +155,25 @@ class GwnTopologyCard extends HTMLElement {
       byName.set(d.mac.toLowerCase(), d);
     }
     const switches = devices.filter((d) => d.type === "SWITCH");
+    const resolve = (text) => {
+      // "<device>:<port>", where the device itself may contain ":" (a MAC).
+      const value = String(text).trim();
+      if (byName.has(value.toLowerCase())) return { device: byName.get(value.toLowerCase()), port: null };
+      const split = value.lastIndexOf(":");
+      if (split > 0) {
+        const device = byName.get(value.slice(0, split).trim().toLowerCase());
+        if (device) return { device, port: value.slice(split + 1).trim() };
+      }
+      return { device: null, port: value };
+    };
     const result = {};
-    for (const [child, target] of Object.entries(this._config.uplinks || {})) {
-      const device = byName.get(String(child).toLowerCase());
-      if (!device) continue;
-      const text = String(target);
-      const split = text.lastIndexOf(":");
-      let parent = split > 0 ? byName.get(text.slice(0, split).toLowerCase()) : switches[0];
-      const port = split > 0 ? text.slice(split + 1) : text;
-      // "Switch" etc. may also be the start of a MAC containing ":" – try the whole value too.
-      if (!parent && split > 0) parent = switches[0];
-      if (parent) result[device.mac] = { parent: parent.mac, port: port.trim() };
+    for (const [key, target] of Object.entries(this._config.uplinks || {})) {
+      const child = resolve(key);
+      if (!child.device) continue;
+      const parent = resolve(target);
+      const parentDevice = parent.device || switches[0];
+      if (!parentDevice || !parent.port) continue;
+      result[child.device.mac] = { parent: parentDevice.mac, port: parent.port, ownPort: child.port };
     }
     return result;
   }
@@ -193,92 +197,101 @@ class GwnTopologyCard extends HTMLElement {
     const wireColor = new Map(Object.keys(uplinks).map((mac, i) => [mac, WIRE_COLORS[i % WIRE_COLORS.length]]));
 
     const plural = (n, key, one) => `${n} ${this._t(n === 1 ? one : key)}`;
+    const chip = (text, cls = "") => `<span class="chip ${cls}"><b>◈</b>${esc(text)}</span>`;
     const chips = net
-      ? `
-        <span class="chip"><i></i>${esc(plural(aps.length, "aps", "ap1"))}</span>
-        <span class="chip"><i></i>${esc(plural(switches.length, "switches", "switch1"))}</span>
-        <span class="chip"><i></i>${esc(plural(connected, "clients", "client1"))}</span>
-        ${wan ? `<span class="chip ${wan.connected ? "ok" : "bad"}"><i></i>${esc(this._t(wan.connected ? "internetOnline" : "internetOffline"))}</span>` : ""}`
+      ? [
+          chip(plural(aps.length, "aps", "ap1")),
+          chip(plural(switches.length, "switches", "switch1")),
+          chip(plural(connected, "clients", "client1"), "boxed"),
+          wan ? chip(this._t(wan.connected ? "internetOnline" : "internetOffline"), wan.connected ? "ok" : "bad") : "",
+        ].join("")
       : "";
+    const speedText = (speed) => (speed ? (speed >= 1000 ? `${speed / 1000} Gbit/s` : `${speed} Mbit/s`) : "");
+    const bandText = (bands) =>
+      Object.entries(bands || {})
+        .sort()
+        .map(([band, n]) => `<span>${esc(band.replace("G", " GHz"))}: <b class="b${esc(band.replace(/\W/g, ""))}">${n}</b></span>`)
+        .join("");
+    const deviceName = (mac) => devices.find((d) => d.mac === mac)?.name ?? "";
 
     const apCard = (ap) => {
       const total = Object.values(ap.bands || {}).reduce((a, b) => a + b, 0);
-      const bands = Object.entries(ap.bands || {})
-        .sort()
-        .map(([band, n]) => `${esc(band.replace("G", " GHz"))}: <b>${n}</b>`)
-        .join(" · ");
       const up = uplinks[ap.mac];
-      const parent = up && devices.find((d) => d.mac === up.parent);
       return `
         <div class="device ap ${ap.online ? "" : "is-offline"}" data-mac="${esc(ap.mac)}" data-entity="${esc(ap.entity_id ?? "")}"
              style="--wire:${wireColor.get(ap.mac) || "var(--muted)"}">
           <div class="device-head">
-            <span class="kind">◆ ${esc(this._t("ap"))}</span>
-            <span class="pill ${ap.online ? "ok" : "bad"}">${esc(this._t(ap.online ? "online" : "offline"))}</span>
+            <span class="kind"><b>◈</b>${esc(this._t("ap"))}</span>
+            <span class="status ${ap.online ? "ok" : "bad"}"><i></i>${esc(this._t(ap.online ? "online" : "offline"))}</span>
           </div>
-          <div class="avatar"><ha-icon icon="mdi:access-point"></ha-icon></div>
+          <div class="avatar"><span>G</span><i class="${ap.online ? "ok" : "bad"}"></i></div>
           <div class="name">${esc(ap.name)}</div>
           <div class="model">${esc(ap.model ?? "")}${ap.area ? ` · ${esc(ap.area)}` : ""}</div>
-          <div class="clients">◆ <b>${total}</b> ${esc(this._t("clients"))}</div>
-          <div class="bands">${bands || "&nbsp;"}</div>
-          <div class="uplink anchor-up">${up
-            ? `◆ ${esc(parent?.name ?? "")} · ${esc(this._t("port"))} ${esc(up.port)}`
+          <div class="clients"><b class="dia">◈</b><b class="n">${total}</b> ${esc(this._t("clients"))}</div>
+          <div class="bands">${bandText(ap.bands)}</div>
+          <div class="uplink"><b class="dia">◈</b>${up
+            ? `${esc(deviceName(up.parent))} · ${esc(this._t("port"))} ${esc(up.port)}`
             : esc(this._t("uplinkUnknown"))}</div>
         </div>`;
     };
 
-    const portBox = (device, port) => {
+    const portBar = (device, port) => {
       const child = Object.entries(uplinks).find(([, u]) => u.parent === device.mac && u.port === port.label);
-      const childDevice = child && devices.find((d) => d.mac === child[0]);
-      const label = childDevice ? childDevice.name : port.clients ? `${port.clients} ${this._t("clients")}` : "";
-      const speed = port.speed ? (port.speed >= 1000 ? `${port.speed / 1000}G` : `${port.speed}M`) : "";
+      const own = uplinks[device.mac]?.ownPort === port.label ? uplinks[device.mac] : null;
+      const label = child
+        ? deviceName(child[0])
+        : own
+          ? deviceName(own.parent)
+          : port.clients
+            ? plural(port.clients, "clients", "client1")
+            : "";
+      const wire = child ? wireColor.get(child[0]) : own ? wireColor.get(device.mac) : "";
       return `
-        <div class="port ${speedClass(port)} ${child ? "linked" : ""}" data-device="${esc(device.mac)}" data-port="${esc(port.label)}"
-             style="${child ? `--wire:${wireColor.get(child[0])}` : ""}" title="${esc(port.label)} ${esc(speed)}">
-          <div class="port-box">
+        <div class="port ${port.up ? "up" : "down"} ${child || own ? "linked" : ""}"
+             data-device="${esc(device.mac)}" data-port="${esc(port.label)}" style="${wire ? `--wire:${wire}` : ""}">
+          <div class="bar">
+            <i class="led"></i>
+            ${port.poe ? `<b class="poe">◆</b>` : ""}
             <span class="num">${esc(port.label)}</span>
-            ${port.poe ? `<span class="poe">⚡</span>` : ""}
-            <span class="speed">${esc(speed)}</span>
           </div>
           <div class="port-label">${esc(label)}</div>
+          <div class="port-speed">${esc(speedText(port.speed))}</div>
         </div>`;
     };
 
     const panel = (device, kind) => {
       const ports = (device.ports || []).filter((p) => this._config.show_all_ports || p.up || kind === "gateway");
       const active = (device.ports || []).filter((p) => p.up).length;
-      const up = uplinks[device.mac];
       const wireless = Object.entries(device.bands || {});
-      const wirelessInfo = wireless.length
-        ? `<span class="muted">◆ <b>${wireless.reduce((a, [, n]) => a + n, 0)}</b> ${esc(this._t("clients"))} · ${wireless
-            .sort().map(([band, n]) => `${esc(band.replace("G", " GHz"))}: ${n}`).join(" · ")}</span>`
-        : "";
-      const extra = kind === "gateway" && device.wan
+      const total = wireless.reduce((a, [, n]) => a + n, 0);
+      const info = kind === "gateway"
         ? `<div class="wan">
-             <span>↓ <b>${esc(formatRate(device.wan.downloadRate))}</b></span>
-             <span>↑ <b>${esc(formatRate(device.wan.uploadRate))}</b></span>
-             <span class="muted">${esc(device.wan.wanIp ?? "")}</span>
-             <span class="muted">${esc(formatDuration(device.wan.connectDuration))}</span>
-             ${wirelessInfo}
+             ${device.wan ? `<div class="rates"><b class="dia">◈</b><span>↓ ${esc(formatRate(device.wan.downloadRate))}</span><span>↑ ${esc(formatRate(device.wan.uploadRate))}</span></div>` : ""}
+             ${total ? `<div class="muted small"><b class="dia">◈</b>${total} ${esc(this._t("clients"))} · ${bandText(device.bands)}</div>` : ""}
            </div>`
-        : wirelessInfo ? `<div class="wan">${wirelessInfo}</div>` : "";
+        : `<div class="brand"><span>G</span><small>NETWORK</small></div>`;
+      const headRight = kind === "gateway" && device.wan
+        ? `<span class="muted small">${esc(device.wan.wanIp ?? "")}${device.wan.connectDuration ? ` · ${esc(formatDuration(device.wan.connectDuration))}` : ""}</span>`
+        : kind === "switch"
+          ? `<span class="muted small">${active}/${(device.ports || []).length} ${esc(this._t("activePorts"))}</span>`
+          : "";
       return `
         <div class="panel ${kind} ${device.online ? "" : "is-offline"}" data-mac="${esc(device.mac)}" data-entity="${esc(device.entity_id ?? "")}"
              style="--wire:${wireColor.get(device.mac) || "var(--muted)"}">
           <div class="panel-head">
-            <div class="avatar small"><ha-icon icon="${kind === "gateway" ? "mdi:router-network" : "mdi:switch"}"></ha-icon></div>
+            <div class="icon-box"><b>◈</b></div>
             <div>
               <div class="name">${esc(device.name)}</div>
-              <div class="model">${esc(device.model ?? "")}${device.area ? ` · ${esc(device.area)}` : ""}</div>
+              <div class="model">${esc(kind === "gateway" ? this._t("gateway") + " · " : "")}${esc(device.model ?? "")}${device.area ? ` · ${esc(device.area)}` : ""}</div>
             </div>
             <div class="spacer"></div>
-            ${kind === "gateway" ? `<span class="kind">${esc(this._t("gateway"))}</span>` : ""}
-            <span class="pill ${device.online ? "ok" : "bad"}">${esc(this._t(device.online ? "online" : "offline"))}</span>
-            ${kind === "switch" ? `<span class="muted small">${active}/${(device.ports || []).length} ${esc(this._t("activePorts"))}</span>` : ""}
+            <span class="status ${device.online ? "ok" : "bad"}"><i></i>${esc(this._t(device.online ? "online" : "offline"))}</span>
+            ${headRight}
+            <div class="icon-box"><b>◈</b></div>
           </div>
-          <div class="panel-body">
-            ${extra}
-            <div class="ports">${ports.map((p) => portBox(device, p)).join("")}</div>
+          <div class="panel-body ${kind === "switch" ? "faceplate" : "gateway-plate"}">
+            ${info}
+            <div class="ports">${ports.map((p) => portBar(device, p)).join("")}</div>
           </div>
         </div>`;
     };
@@ -299,17 +312,15 @@ class GwnTopologyCard extends HTMLElement {
           <div class="stage">
             <svg class="wires"></svg>
             ${aps.length ? `<div class="aps">${aps.map(apCard).join("")}</div>` : ""}
-            ${switches.map((s) => panel(s, "switch")).join("")}
+            ${switches.map((sw) => panel(sw, "switch")).join("")}
             ${routers.map((r) => panel(r, "gateway")).join("")}
           </div>
           <div class="footer">
             <span class="legend"><i class="ok"></i>${esc(this._t("online"))}</span>
             <span class="legend"><i class="bad"></i>${esc(this._t("offline"))}</span>
-            <span class="legend"><i class="s2500"></i>2.5G</span>
-            <span class="legend"><i class="s1000"></i>1G</span>
-            <span class="legend"><i class="s100"></i>100M</span>
+            <span class="legend"><i class="unknown"></i>${esc(this._t("unknown"))}</span>
             <span class="spacer"></span>
-            <span class="muted">GWN Topology</span>
+            <span>GWN Network Topology</span>
           </div>
         </div>
       </ha-card>`;
@@ -332,133 +343,161 @@ class GwnTopologyCard extends HTMLElement {
     const base = stage.getBoundingClientRect();
     svg.setAttribute("width", base.width);
     svg.setAttribute("height", base.height);
+    const portBar = (mac, label) =>
+      stage.querySelector(`.port[data-device="${CSS.escape(mac)}"][data-port="${CSS.escape(label)}"] .bar`);
     const paths = [];
     for (const [index, [childMac, up]] of Object.entries(this._uplinkMap).entries()) {
-      const child = stage.querySelector(`[data-mac="${CSS.escape(childMac)}"]`);
-      const port = stage.querySelector(
-        `.port[data-device="${CSS.escape(up.parent)}"][data-port="${CSS.escape(up.port)}"] .port-box`,
-      );
-      if (!child || !port) continue;
-      const from = child.getBoundingClientRect();
-      const to = port.getBoundingClientRect();
-      const color = getComputedStyle(child).getPropertyValue("--wire").trim() || "#22d3ee";
+      const childEl = stage.querySelector(`[data-mac="${CSS.escape(childMac)}"]`);
+      // Start at the child's own uplink port if configured, otherwise at the device itself.
+      const fromEl = (up.ownPort && portBar(childMac, up.ownPort)) || childEl;
+      const toEl = portBar(up.parent, up.port);
+      if (!childEl || !fromEl || !toEl) continue;
+      const from = fromEl.getBoundingClientRect();
+      const to = toEl.getBoundingClientRect();
+      const color = getComputedStyle(childEl).getPropertyValue("--wire").trim() || "#22d3ee";
       const x1 = from.left + from.width / 2 - base.left;
       const x2 = to.left + to.width / 2 - base.left;
-      let y1, y2;
-      if (from.top < to.top) {
-        // Device above the port it is plugged into (AP above the switch, switch above the gateway).
-        y1 = from.bottom - base.top;
-        y2 = to.top - base.top;
-      } else {
-        y1 = from.top - base.top;
-        y2 = to.bottom - base.top;
-      }
-      // Run the horizontal part through the gap below/above the device.
-      // Slightly offset per wire so parallel runs stay distinguishable.
-      const mid = y1 + Math.sign(y2 - y1) * (9 + (index % 4) * 5);
+      const down = from.top < to.top;
+      const y1 = (down ? from.bottom : from.top) - base.top;
+      const y2 = (down ? to.top : to.bottom) - base.top;
+      // Horizontal run through the gap between the source device and the next row,
+      // offset per wire so parallel runs stay distinguishable.
+      const box = childEl.getBoundingClientRect();
+      const edge = (down ? box.bottom : box.top) - base.top;
+      const mid = edge + (down ? 1 : -1) * (14 + (index % 4) * 6);
+      const d = `M${x1},${y1} V${mid} H${x2} V${y2}`;
       paths.push(`
-        <path d="M${x1},${y1} V${mid} H${x2} V${y2}" class="wire-glow" stroke="${color}"/>
-        <path d="M${x1},${y1} V${mid} H${x2} V${y2}" class="wire" stroke="${color}"/>
-        <circle cx="${x2}" cy="${y2}" r="3" fill="${color}"/>`);
+        <path d="${d}" class="wire-glow" stroke="${color}"/>
+        <path d="${d}" class="wire" stroke="${color}"/>
+        <circle cx="${x1}" cy="${y1}" r="3.5" fill="${color}" class="dot"/>
+        <circle cx="${x2}" cy="${y2}" r="4" class="ring" stroke="${color}"/>`);
     }
     svg.innerHTML = paths.join("");
   }
 }
 
 const STYLE = `
-  ha-card { overflow: hidden; }
+  ha-card { overflow: hidden; border: none; }
   .wrap {
-    position: relative; padding: 16px 18px 12px; color: var(--text); background: var(--bg);
-    font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
+    position: relative; color: var(--text); background: var(--bg);
+    font-family: Inter, var(--paper-font-body1_-_font-family, Roboto, sans-serif);
   }
   .wrap.dark {
-    --bg: radial-gradient(ellipse at 50% 0%, #15233a 0%, #0b1220 70%);
-    --text: #e6edf7; --muted: #8597b2; --panel: rgba(255,255,255,.035); --panel-2: rgba(255,255,255,.06);
-    --border: rgba(148,175,220,.16); --port: #0f1a2b; --ok: #34d399; --bad: #f87171; --unknown: #fbbf24;
-    --glow: 1;
+    --bg: linear-gradient(180deg, #0f1f2b 0%, #0c1a24 100%);
+    --text: #f1f5f9; --muted: #8aa0b4; --line: rgba(120, 170, 200, .16);
+    --card: linear-gradient(180deg, #13283a 0%, #102231 100%); --card-border: rgba(120, 170, 200, .22);
+    --accent: #38c6e8; --ok: #3ee08f; --bad: #f87171; --unknown: #fbbf24;
+    --plate: linear-gradient(180deg, #f5f7f9 0%, #dfe5ea 100%); --plate-text: #24323f;
+    --gw-plate: linear-gradient(180deg, #123444 0%, #0f2a36 100%);
+    --bar: #0c1d24; --glow: 1;
   }
   .wrap.light {
-    --bg: linear-gradient(180deg, #f7f9fc 0%, #edf1f7 100%);
-    --text: #1b2433; --muted: #66748b; --panel: #ffffff; --panel-2: #f3f6fb;
-    --border: rgba(27,36,51,.1); --port: #eef2f8; --ok: #059669; --bad: #dc2626; --unknown: #d97706;
-    --glow: 0;
+    --bg: linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+    --text: #14202b; --muted: #5d6f80; --line: rgba(20, 32, 43, .1);
+    --card: #ffffff; --card-border: rgba(20, 32, 43, .12);
+    --accent: #0891b2; --ok: #10b981; --bad: #dc2626; --unknown: #d97706;
+    --plate: linear-gradient(180deg, #ffffff 0%, #e6ebf0 100%); --plate-text: #24323f;
+    --gw-plate: linear-gradient(180deg, #e8f2f6 0%, #dbe9ef 100%);
+    --bar: #102530; --glow: 0;
   }
-  .header { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .eyebrow { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #22d3ee; font-weight: 700; }
-  .title { font-size: 18px; font-weight: 600; margin-top: 2px; }
-  .chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 18px 22px 14px; border-bottom: 1px solid var(--line);
+  }
+  .eyebrow { font-size: 10px; letter-spacing: 2.2px; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .title { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
   .chip {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 10px;
-    border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted);
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; padding: 6px 12px;
+    border: 1px solid var(--card-border); border-radius: 999px; color: var(--text);
   }
-  .chip i { width: 6px; height: 6px; border-radius: 50%; background: #22d3ee; }
-  .chip.ok { color: var(--ok); } .chip.ok i { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
-  .chip.bad { color: var(--bad); } .chip.bad i { background: var(--bad); }
-  .stage { position: relative; display: flex; flex-direction: column; gap: 34px; }
-  .wires { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
-  .wire { fill: none; stroke-width: 2; stroke-dasharray: 6 6; animation: flow 1.6s linear infinite; }
-  .wire-glow { fill: none; stroke-width: 6; opacity: calc(.18 * var(--glow)); }
-  @keyframes flow { to { stroke-dashoffset: -24; } }
-  .aps { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; position: relative; z-index: 1; }
-  .device, .panel {
-    position: relative; z-index: 1; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 14px; cursor: pointer; transition: border-color .2s, transform .2s;
+  .chip > b, .dia, .kind > b, .icon-box b { color: var(--accent); font-weight: 400; }
+  .chip.boxed { box-shadow: inset 0 0 0 3px transparent; }
+  .chip.ok { color: var(--ok); } .chip.ok > b { color: var(--ok); }
+  .chip.bad { color: var(--bad); } .chip.bad > b { color: var(--bad); }
+  .stage { position: relative; display: flex; flex-direction: column; gap: 40px; padding: 16px 16px 8px; }
+  .wires { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 3; }
+  .wire { fill: none; stroke-width: 2; }
+  .wire-glow { fill: none; stroke-width: 7; opacity: calc(.22 * var(--glow)); }
+  .ring { fill: var(--bar); stroke-width: 2; }
+  .aps { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; position: relative; z-index: 1; }
+  .device {
+    width: 245px; padding: 12px 14px 12px; text-align: center; position: relative; z-index: 1;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; cursor: pointer;
   }
   .device:hover, .panel:hover { border-color: var(--wire); }
-  .device { padding: 10px 12px 10px; text-align: center; }
-  .device.is-offline, .panel.is-offline { opacity: .6; }
-  .device-head, .panel-head { display: flex; align-items: center; gap: 8px; }
-  .device-head { justify-content: space-between; }
-  .kind { font-size: 10px; color: var(--muted); letter-spacing: .3px; }
-  .device .kind { color: var(--wire); }
-  .pill { font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
-  .pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
-  .pill.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
-  .avatar {
-    width: 46px; height: 46px; margin: 8px auto 6px; border-radius: 50%; display: grid; place-items: center;
-    background: radial-gradient(circle at 35% 30%, #ffffff, #dbe7f5); color: #0b5b8a;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wire) 55%, transparent),
-                0 0 calc(18px * var(--glow)) color-mix(in srgb, var(--wire) 60%, transparent);
+  .device-head { display: flex; justify-content: space-between; align-items: center; }
+  .kind { font-size: 11px; color: var(--muted); display: inline-flex; gap: 6px; }
+  .status {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px; background: rgba(62, 224, 143, .1); color: var(--text);
   }
-  .avatar.small { width: 30px; height: 30px; margin: 0; }
-  .avatar ha-icon { --mdc-icon-size: 24px; }
-  .avatar.small ha-icon { --mdc-icon-size: 18px; }
-  .name { font-weight: 600; font-size: 13px; }
-  .model { font-size: 11px; color: var(--muted); }
-  .clients { font-size: 12px; margin-top: 6px; }
-  .clients, .device .uplink { color: var(--muted); }
-  .clients b { color: var(--text); }
-  .bands { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .status i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .status.bad { background: rgba(248, 113, 113, .12); } .status.bad i { background: var(--bad); box-shadow: none; }
+  .avatar {
+    position: relative; width: 62px; height: 62px; margin: 10px auto 10px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: radial-gradient(circle at 40% 35%, #ffffff 0%, #e9eef2 70%, #cfd8df 100%);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.1), 0 0 calc(22px * var(--glow)) rgba(56, 198, 232, .25);
+  }
+  .avatar span { font-size: 26px; font-weight: 300; color: #2b3a47; }
+  .avatar i {
+    position: absolute; right: 8px; bottom: 9px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ok); box-shadow: 0 0 0 2px #fff;
+  }
+  .avatar i.bad { background: var(--bad); }
+  .name { font-weight: 700; font-size: 14px; }
+  .model { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .clients { font-size: 12px; margin-top: 8px; color: var(--muted); display: inline-flex; gap: 6px; align-items: baseline; }
+  .clients .n { color: var(--text); font-size: 14px; }
+  .bands { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; justify-content: center; gap: 10px; min-height: 14px; }
   .bands b { color: var(--text); }
-  .uplink { font-size: 10px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
-  .panel { padding: 10px 12px 12px; }
-  .panel-head { margin-bottom: 10px; }
+  .bands b.b5G, .bands b.b6G { color: var(--ok); }
+  .uplink { font-size: 11px; color: var(--muted); margin-top: 18px; display: inline-flex; gap: 6px; }
+  .panel {
+    position: relative; z-index: 1; border-radius: 14px; overflow: hidden; cursor: pointer;
+    background: var(--card); border: 1px solid var(--card-border);
+  }
+  .panel-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+  .icon-box {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    border: 1px solid var(--card-border); background: rgba(56, 198, 232, .06); font-size: 13px;
+  }
   .spacer { flex: 1; }
   .muted { color: var(--muted); }
   .small { font-size: 11px; }
-  .panel-body { background: var(--panel-2); border-radius: 10px; padding: 10px; display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-  .wan { display: flex; flex-direction: column; gap: 2px; font-size: 12px; min-width: 130px; }
-  .ports { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
-  .port { width: 64px; text-align: center; }
-  .port-box {
-    position: relative; height: 30px; border-radius: 6px; background: var(--port);
-    border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 3px;
-    font-size: 11px; font-weight: 600;
+  .panel-body { display: flex; gap: 16px; align-items: center; padding: 14px 16px 12px; }
+  .faceplate { background: var(--plate); color: var(--plate-text); }
+  .faceplate .port-label { color: var(--plate-text); }
+  .faceplate .port-speed { color: #6b7c8c; }
+  .gateway-plate { background: var(--gw-plate); }
+  .brand { width: 54px; text-align: center; line-height: 1; }
+  .brand span { font-size: 26px; font-weight: 300; }
+  .brand small { display: block; font-size: 7px; letter-spacing: 1.2px; font-weight: 700; margin-top: 3px; }
+  .wan { min-width: 150px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .rates { display: flex; gap: 12px; align-items: center; font-weight: 600; }
+  .ports { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; }
+  .port { flex: 1 1 90px; min-width: 70px; text-align: center; }
+  .bar {
+    position: relative; height: 30px; border-radius: 6px; background: var(--bar);
+    border: 2px solid rgba(255, 255, 255, .12); display: flex; align-items: center; justify-content: center;
   }
-  .port.s2500 .port-box { border-color: #22d3ee; box-shadow: 0 0 calc(8px * var(--glow)) #22d3ee66; }
-  .port.s1000 .port-box { border-color: #34d399; box-shadow: 0 0 calc(8px * var(--glow)) #34d39966; }
-  .port.s100 .port-box { border-color: #fbbf24; }
-  .port.up .port-box { border-color: var(--ok); }
-  .port.down .port-box { opacity: .45; }
-  .port.linked .port-box { border-color: var(--wire); box-shadow: 0 0 calc(10px * var(--glow)) var(--wire); }
-  .port .speed { position: absolute; bottom: 1px; right: 4px; font-size: 8px; color: var(--muted); font-weight: 500; }
-  .port .poe { font-size: 10px; }
-  .port-label { font-size: 9px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .footer { display: flex; gap: 12px; align-items: center; margin-top: 14px; font-size: 10px; color: var(--muted); flex-wrap: wrap; }
+  .port.up .bar { border-color: var(--ok); box-shadow: 0 0 calc(10px * var(--glow)) rgba(62, 224, 143, .35); }
+  .port.down .bar { opacity: .5; }
+  .bar .led { position: absolute; left: 6px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #3b4b57; }
+  .port.up .bar .led { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
+  .bar .poe { position: absolute; right: 6px; top: 3px; font-size: 9px; color: #f5c542; }
+  .bar .num { color: #e8eef3; font-size: 11px; font-weight: 700; margin-top: 8px; }
+  .port-label { font-size: 11px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .port-speed { font-size: 9px; color: var(--muted); min-height: 11px; }
+  .is-offline { opacity: .6; }
+  .footer {
+    display: flex; gap: 14px; align-items: center; padding: 10px 18px 12px; font-size: 10px; color: var(--muted);
+    border-top: 1px solid var(--line); flex-wrap: wrap;
+  }
   .legend { display: inline-flex; align-items: center; gap: 5px; }
   .legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-  .legend i.ok { background: var(--ok); } .legend i.bad { background: var(--bad); }
-  .legend i.s2500 { background: #22d3ee; } .legend i.s1000 { background: #34d399; } .legend i.s100 { background: #fbbf24; }
+  .legend i.ok { background: var(--ok); } .legend i.bad { background: var(--bad); } .legend i.unknown { background: var(--unknown); }
   .empty { padding: 24px; text-align: center; color: var(--muted); }
   .empty.bad { color: var(--bad); }
 `;
