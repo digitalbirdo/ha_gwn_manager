@@ -27,20 +27,21 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     ent_reg = er.async_get(hass)
     area_reg = ar.async_get(hass)
 
-    def device_info(mac: str) -> tuple[str | None, str | None]:
+    def device_info(mac: str) -> tuple[str | None, str | None, str | None]:
+        """Device ID, user-given device name and area name."""
         device = async_get_device(hass, entry.entry_id, mac)
         if device is None:
-            return None, None
+            return None, None, None
         area = area_reg.async_get_area(device.area_id) if device.area_id else None
-        return device.id, area.name if area else None
+        return device.id, device.name_by_user, area.name if area else None
 
     aps = []
     for mac, ap in coordinator.data.aps.items():
-        device_id, area = device_info(mac)
+        device_id, user_name, area = device_info(mac)
         aps.append(
             {
                 "mac": mac,
-                "name": ap.get("name") or mac,
+                "name": user_name or ap.get("name") or mac,
                 "model": ap.get("apType"),
                 "online": ap.get("status") == 1,
                 "clients": ap.get("clients"),
@@ -55,11 +56,11 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
 
     clients = []
     for mac, client in coordinator.data.clients.items():
-        device_id, _ = device_info(mac)
+        device_id, user_name, _ = device_info(mac)
         clients.append(
             {
                 "mac": mac,
-                "name": client_name(mac, client),
+                "name": user_name or client_name(mac, client),
                 "connected": bool(client.get("connected")),
                 "ap": (client.get("apId") or "").upper() or None,
                 "rssi": client.get("rssi") if client.get("connected") else None,

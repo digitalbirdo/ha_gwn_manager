@@ -9,12 +9,12 @@
  *   title: Netzwerk          # optional
  *   height: 450              # px, optional
  *   show_offline: false      # also show disconnected clients
- *   show_labels: false       # always show client names (otherwise on hover)
+ *   show_labels: true        # show client names (false: only on hover)
  *   animate: true            # gentle floating of the bubbles
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -55,6 +55,7 @@ class GwnNetworkCard extends HTMLElement {
     this._links = [];
     this._alpha = 1;
     this._view = { x: 0, y: 0, k: 1 };
+    this._autoFit = true;
     this._width = 400;
     this._frame = null;
     this._unsub = null;
@@ -69,10 +70,12 @@ class GwnNetworkCard extends HTMLElement {
     this._config = {
       height: 450,
       show_offline: false,
-      show_labels: false,
+      show_labels: true,
       animate: true,
       ...config,
     };
+    // Labels need more room between the bubbles.
+    this._spread = this._config.show_labels ? 2.2 : 1;
     this._render();
   }
 
@@ -155,7 +158,9 @@ class GwnNetworkCard extends HTMLElement {
       const root = upsert(`net:${net.entry_id}`, "root", { name: net.title });
       for (const ap of net.aps) {
         const node = upsert(`ap:${ap.mac}`, "ap", ap, root);
-        links.push({ source: root, target: node, length: 150, strength: 1 });
+        links.push({
+          source: root, target: node, length: this._config.show_labels ? 210 : 150, strength: 1,
+        });
       }
       for (const client of net.clients) {
         if (!client.connected && !this._config.show_offline) continue;
@@ -165,7 +170,7 @@ class GwnNetworkCard extends HTMLElement {
         links.push({
           source: parent,
           target: node,
-          length: apNode ? linkLength(client.rssi) : 230,
+          length: (apNode ? linkLength(client.rssi) : 230) * (this._config.show_labels ? 1.35 : 1),
           strength: apNode ? 1 : 0.3,
           rssi: client.rssi,
           offline: !client.connected,
@@ -200,8 +205,8 @@ class GwnNetworkCard extends HTMLElement {
         let d2 = dx * dx + dy * dy;
         if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
         const d = Math.sqrt(d2);
-        let f = (REPULSION * CHARGE[a.type] * CHARGE[b.type]) / d2;
-        const minDist = RADIUS[a.type] + RADIUS[b.type] + 4;
+        let f = (REPULSION * CHARGE[a.type] * CHARGE[b.type] * this._spread) / d2;
+        const minDist = RADIUS[a.type] + RADIUS[b.type] + (this._config.show_labels ? 14 : 4);
         if (d < minDist) f += (minDist - d) * 0.5;
         const fx = (dx / d) * f * alpha;
         const fy = (dy / d) * f * alpha;
@@ -428,8 +433,33 @@ class GwnNetworkCard extends HTMLElement {
       line.setAttribute("x2", link.target.x.toFixed(1));
       line.setAttribute("y2", link.target.y.toFixed(1));
     });
+    if (this._autoFit) this._fit();
     const { x, y, k } = this._view;
     this._viewport.setAttribute("transform", `translate(${x},${y}) scale(${k})`);
+  }
+
+  _fit() {
+    // Smoothly zoom/pan so that all bubbles (and their labels) are visible.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of this._nodes.values()) {
+      const r = (n.r || RADIUS[n.type]) + (this._config.show_labels || n.type !== "client" ? 45 : 10);
+      minX = Math.min(minX, n.x - r);
+      maxX = Math.max(maxX, n.x + r);
+      minY = Math.min(minY, n.y - r);
+      maxY = Math.max(maxY, n.y + r + 10);
+    }
+    if (!Number.isFinite(minX)) return;
+    const height = this._config.height - 24; // keep the legend free
+    const k = Math.min(1.5, this._width / (maxX - minX), height / (maxY - minY));
+    const target = {
+      k,
+      x: this._width / 2 - ((minX + maxX) / 2) * k,
+      y: height / 2 - ((minY + maxY) / 2) * k,
+    };
+    const ease = 0.08;
+    this._view.k += (target.k - this._view.k) * ease;
+    this._view.x += (target.x - this._view.x) * ease;
+    this._view.y += (target.y - this._view.y) * ease;
   }
 
   // ---------------------------------------------------------- interaction
@@ -496,6 +526,7 @@ class GwnNetworkCard extends HTMLElement {
     });
     this._svg.addEventListener("pointermove", (event) => {
       if (!pan) return;
+      this._autoFit = false;
       this._view.x = event.clientX - pan.x;
       this._view.y = event.clientY - pan.y;
     });
@@ -507,6 +538,7 @@ class GwnNetworkCard extends HTMLElement {
     this._svg.addEventListener("pointercancel", end);
     this._svg.addEventListener("wheel", (event) => {
       event.preventDefault();
+      this._autoFit = false;
       const rect = this._svg.getBoundingClientRect();
       const mx = event.clientX - rect.left;
       const my = event.clientY - rect.top;
@@ -516,7 +548,7 @@ class GwnNetworkCard extends HTMLElement {
       this._view.k = k;
     }, { passive: false });
     this._svg.addEventListener("dblclick", () => {
-      this._view = { x: 0, y: 0, k: 1 };
+      this._autoFit = true;
     });
   }
 

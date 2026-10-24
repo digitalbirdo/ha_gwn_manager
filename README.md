@@ -36,11 +36,12 @@ type: custom:gwn-network-card
 title: Netzwerk          # optional
 height: 450              # px
 show_offline: false      # also show disconnected clients
-show_labels: false       # always show client names (otherwise on hover)
+show_labels: true        # show client names (false: only on hover)
 animate: true            # gentle floating of the bubbles
 ```
 
-Drag bubbles around, scroll to zoom, drag the background to pan, double-click to reset.
+The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background
+to pan, double-click to fit again. Client names follow the device names you set in Home Assistant.
 Hover for details, click to open the device tracker / AP status.
 
 ## Installation
