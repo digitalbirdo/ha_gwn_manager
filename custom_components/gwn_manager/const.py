@@ -25,6 +25,8 @@ DEFAULT_AWAY_DELAY = 180
 DEFAULT_TRACK_OFFLINE = True
 
 CONF_SSID_FILTER = "ssid_filter"
+# Lines "<client name or MAC> = <device name or MAC>[:<port>]"
+CONF_MANUAL_UPLINKS = "manual_uplinks"
 
 # Fired on the event bus, also shown in the logbook.
 EVENT_CLIENT_CONNECTED = f"{DOMAIN}_client_connected"

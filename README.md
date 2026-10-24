@@ -76,7 +76,9 @@ uplinks:                 # which port each device is plugged into – the GWN AP
   Switch: Gateway:LAN1
 ```
 
-Click a device to open its status.
+Tap a device to select it: its uplink is highlighted and its connected clients are listed
+(tap a client for details). The ⓘ button opens the device status. On narrow screens only the
+selected device's wire is shown, routed along the side.
 
 ## Installation
 
@@ -109,6 +111,8 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - **Update interval for all other data** (default 90 s): offline clients, devices and device details.
   GWN Manager itself refreshes signal strength and other measurements only about every 90 s.
 - **Only track clients of these SSIDs** (default: all)
+- **Manual assignments**: one line per client, `client = device` or `client = device:port` (names or MACs),
+  e.g. for devices behind an AP's LAN port, which GWN Manager attributes to the router
 - **Track offline clients**: create entities for all clients known to GWN Manager, not only for currently connected ones
 
 ## API notes

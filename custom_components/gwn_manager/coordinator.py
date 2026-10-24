@@ -5,6 +5,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
+import re
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -19,6 +20,7 @@ from .api import GWNAuthError, GWNClient, GWNError
 from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
+    CONF_MANUAL_UPLINKS,
     CONF_PRESENCE_INTERVAL,
     CONF_SERVER_URL,
     DEFAULT_PRESENCE_INTERVAL,
@@ -52,6 +54,32 @@ class GWNData:
     ssids: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Connection events detected in this update: (MAC, event type, event data).
     events: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
+
+
+MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
+
+
+def parse_manual_uplinks(text: str | None) -> list[tuple[str, str, str | None]]:
+    """Parse "client = device[:port]" lines into (client, device, port) tuples.
+
+    Names and MACs are accepted on both sides. A target that is a bare MAC has
+    no port; otherwise the part after the last ":" is the port.
+    """
+    result = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        client, target = (part.strip() for part in line.split("=", 1))
+        if not client or not target:
+            continue
+        device, port = target, None
+        if not MAC_RE.match(target) and ":" in target:
+            head, _, tail = target.rpartition(":")
+            if head.strip() and tail.strip():
+                device, port = head.strip(), tail.strip()
+        result.append((client, device, port))
+    return result
 
 
 def normalize_mac(mac: str | None) -> str:
@@ -166,8 +194,53 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             rates = self._rates.get(mac) if client["connected"] else None
             client["uploadRate"], client["downloadRate"] = rates or (None, None)
 
+        self._apply_manual_uplinks(data)
         self._detect_events(data)
         return data
+
+    def _apply_manual_uplinks(self, data: GWNData) -> None:
+        """Override the device a client is attached to, e.g. behind an AP's LAN port.
+
+        GWN Manager attributes wired clients behind an AP's LAN port to the
+        router, so the user can assign them in the options.
+        """
+        rules = parse_manual_uplinks(self.config_entry.options.get(CONF_MANUAL_UPLINKS))
+        if not rules:
+            return
+
+        def find_device(ref: str) -> str | None:
+            mac = normalize_mac(ref)
+            if mac in data.aps:
+                return mac
+            for ap_mac, ap in data.aps.items():
+                if (ap.get("name") or "").casefold() == ref.casefold():
+                    return ap_mac
+            return None
+
+        def find_clients(ref: str) -> list[str]:
+            mac = normalize_mac(ref)
+            if mac in data.clients:
+                return [mac]
+            return [
+                client_mac
+                for client_mac, client in data.clients.items()
+                if ref.casefold()
+                in {
+                    (client.get(key) or "").casefold()
+                    for key in ("name", "clientName", "dhcpHostname")
+                }
+            ]
+
+        for client_ref, device_ref, port in rules:
+            if (device_mac := find_device(device_ref)) is None:
+                continue
+            for client_mac in find_clients(client_ref):
+                client = data.clients[client_mac]
+                client["apId"] = device_mac
+                client["apName"] = data.aps[device_mac].get("name")
+                client["manualUplink"] = True
+                if port:
+                    client["port"] = port
 
     def _update_throughput(self, mac: str, client: dict[str, Any], now: datetime) -> None:
         """Derive bit/s from the session byte counters of a connected client."""

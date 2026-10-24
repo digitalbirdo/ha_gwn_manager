@@ -29,6 +29,7 @@ from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
     CONF_AWAY_DELAY,
+    CONF_MANUAL_UPLINKS,
     CONF_PRESENCE_INTERVAL,
     CONF_SERVER_URL,
     CONF_SSID_FILTER,
@@ -200,6 +201,9 @@ class GWNOptionsFlow(OptionsFlow):
                             custom_value=True,
                         )
                     ),
+                    vol.Optional(
+                        CONF_MANUAL_UPLINKS, default=options.get(CONF_MANUAL_UPLINKS, "")
+                    ): TextSelector(TextSelectorConfig(multiline=True)),
                 }
             ),
         )

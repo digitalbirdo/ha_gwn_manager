@@ -17,7 +17,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.2";
+const TOPOLOGY_VERSION = "0.5.3";
 const RESUBSCRIBE_MS = 90_000;
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
@@ -28,7 +28,8 @@ const TEXT = {
     ap1: "AP", switch1: "Switch", client1: "Client",
     unknown: "Unknown", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "active ports", uplinkUnknown: "Uplink unknown", noData: "Waiting for data…",
-    port: "Port",
+    port: "Port", wired: "Wired", tapHint: "Tap a device to show its connections",
+    noClients: "No clients connected",
   },
   de: {
     topology: "Netzwerk-Topologie", ap: "Access Point", gateway: "Internet-Gateway", switch: "Switch",
@@ -36,7 +37,8 @@ const TEXT = {
     ap1: "AP", switch1: "Switch", client1: "Client",
     unknown: "Unbekannt", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "aktive Ports", uplinkUnknown: "Uplink unbekannt", noData: "Warte auf Daten …",
-    port: "Port",
+    port: "Port", wired: "Kabel", tapHint: "Gerät antippen, um Verbindungen zu zeigen",
+    noClients: "Keine Clients verbunden",
   },
 };
 
@@ -189,6 +191,8 @@ class GwnTopologyCard extends HTMLElement {
     const uplinks = this._uplinks(devices);
     this._uplinkMap = uplinks;
 
+    // Narrow card (phone): wires only for the selected device, routed along the side.
+    this._compact = this._isCompact();
     const switches = devices.filter((d) => d.type === "SWITCH");
     const routers = devices.filter((d) => d.type === "ROUTER" || d.wan);
     const aps = devices.filter((d) => !switches.includes(d) && !routers.includes(d));
@@ -214,15 +218,40 @@ class GwnTopologyCard extends HTMLElement {
         .join("");
     const deviceName = (mac) => devices.find((d) => d.mac === mac)?.name ?? "";
 
+    const rssiColor = (rssi) =>
+      rssi == null ? "var(--muted)" : rssi >= -60 ? "#3ee08f" : rssi >= -70 ? "#a3e635" : rssi >= -80 ? "#f5c542" : "#f87171";
+    const clientList = (device) => {
+      if (this._selected !== device.mac) return "";
+      const list = clients
+        .filter((c) => c.connected && c.ap === device.mac)
+        .sort((a, b) => Number(a.wired) - Number(b.wired) || (b.rssi ?? -999) - (a.rssi ?? -999));
+      if (!list.length) return `<div class="client-list empty-list">${esc(this._t("noClients"))}</div>`;
+      return `<div class="client-list">${list
+        .map((c) => `
+          <div class="client-row" data-client-entity="${esc(c.entity_id ?? "")}">
+            <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
+            <span class="cname">${esc(c.name)}</span>
+            <span class="cmeta">${c.wired
+              ? `${esc(this._t("wired"))}${c.port ? ` · ${esc(c.port)}` : ""}`
+              : `${esc((c.band || "").replace("G", " GHz"))}${c.rssi != null ? ` · ${esc(c.rssi)} dBm` : ""}`}</span>
+          </div>`)
+        .join("")}</div>`;
+    };
+    const infoButton = (device) =>
+      device.entity_id ? `<button class="info" data-info="${esc(device.entity_id)}" title="Info">ⓘ</button>` : "";
+
     const apCard = (ap) => {
       const total = Object.values(ap.bands || {}).reduce((a, b) => a + b, 0);
       const up = uplinks[ap.mac];
       return `
-        <div class="device ap ${ap.online ? "" : "is-offline"}" data-mac="${esc(ap.mac)}" data-entity="${esc(ap.entity_id ?? "")}"
+        <div class="device ap ${ap.online ? "" : "is-offline"} ${this._selected === ap.mac ? "selected" : ""}" data-mac="${esc(ap.mac)}" data-select="${esc(ap.mac)}"
              style="--wire:${wireColor.get(ap.mac) || "var(--muted)"}">
           <div class="device-head">
             <span class="kind"><b>◈</b>${esc(this._t("ap"))}</span>
-            <span class="status ${ap.online ? "ok" : "bad"}"><i></i>${esc(this._t(ap.online ? "online" : "offline"))}</span>
+            <span class="head-right">
+              <span class="status ${ap.online ? "ok" : "bad"}"><i></i>${esc(this._t(ap.online ? "online" : "offline"))}</span>
+              ${infoButton(ap)}
+            </span>
           </div>
           <div class="avatar"><span>G</span><i class="${ap.online ? "ok" : "bad"}"></i></div>
           <div class="name">${esc(ap.name)}</div>
@@ -232,6 +261,7 @@ class GwnTopologyCard extends HTMLElement {
           <div class="uplink"><b class="dia">◈</b>${up
             ? `${esc(deviceName(up.parent))} · ${esc(this._t("port"))} ${esc(up.port)}`
             : esc(this._t("uplinkUnknown"))}</div>
+          ${clientList(ap)}
         </div>`;
     };
 
@@ -276,7 +306,7 @@ class GwnTopologyCard extends HTMLElement {
           ? `<span class="muted small">${active}/${(device.ports || []).length} ${esc(this._t("activePorts"))}</span>`
           : "";
       return `
-        <div class="panel ${kind} ${device.online ? "" : "is-offline"}" data-mac="${esc(device.mac)}" data-entity="${esc(device.entity_id ?? "")}"
+        <div class="panel ${kind} ${device.online ? "" : "is-offline"} ${this._selected === device.mac ? "selected" : ""}" data-mac="${esc(device.mac)}" data-select="${esc(device.mac)}"
              style="--wire:${wireColor.get(device.mac) || "var(--muted)"}">
           <div class="panel-head">
             <div class="icon-box"><b>◈</b></div>
@@ -287,19 +317,20 @@ class GwnTopologyCard extends HTMLElement {
             <div class="spacer"></div>
             <span class="status ${device.online ? "ok" : "bad"}"><i></i>${esc(this._t(device.online ? "online" : "offline"))}</span>
             ${headRight}
-            <div class="icon-box"><b>◈</b></div>
+            ${infoButton(device)}
           </div>
           <div class="panel-body ${kind === "switch" ? "faceplate" : "gateway-plate"}">
             ${info}
             <div class="ports">${ports.map((p) => portBar(device, p)).join("")}</div>
           </div>
+          ${clientList(device)}
         </div>`;
     };
 
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
       <ha-card>
-        <div class="wrap">
+        <div class="wrap ${this._compact ? "compact" : ""}">
           <div class="header">
             <div>
               <div class="eyebrow">${esc(this._t("topology"))}</div>
@@ -320,63 +351,103 @@ class GwnTopologyCard extends HTMLElement {
             <span class="legend"><i class="bad"></i>${esc(this._t("offline"))}</span>
             <span class="legend"><i class="unknown"></i>${esc(this._t("unknown"))}</span>
             <span class="spacer"></span>
-            <span>GWN Network Topology</span>
+            <span>${this._compact && !this._selected ? esc(this._t("tapHint")) : "GWN Network Topology"}</span>
           </div>
         </div>
       </ha-card>`;
     this._applyAppearance();
-    for (const el of this.shadowRoot.querySelectorAll("[data-entity]")) {
+    const moreInfo = (entityId) =>
+      entityId && this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } }));
+    for (const el of this.shadowRoot.querySelectorAll("[data-select]")) {
       el.addEventListener("click", () => {
-        const entityId = el.dataset.entity;
-        if (entityId) {
-          this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } }));
-        }
+        this._selected = this._selected === el.dataset.select ? null : el.dataset.select;
+        this._render();
+      });
+    }
+    for (const el of this.shadowRoot.querySelectorAll("[data-info]")) {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        moreInfo(el.dataset.info);
+      });
+    }
+    for (const el of this.shadowRoot.querySelectorAll("[data-client-entity]")) {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        moreInfo(el.dataset.clientEntity);
       });
     }
     requestAnimationFrame(() => this._drawWires());
+  }
+
+  _isCompact() {
+    const width = this.getBoundingClientRect().width;
+    return width > 0 && width < 640;
   }
 
   _drawWires() {
     const svg = this.shadowRoot?.querySelector(".wires");
     const stage = this.shadowRoot?.querySelector(".stage");
     if (!svg || !stage || !this._uplinkMap) return;
+    const compact = this._isCompact();
+    if (compact !== this._compact) {
+      // Crossed the phone breakpoint (rotation, resize): re-render the layout.
+      this._render();
+      return;
+    }
     const base = stage.getBoundingClientRect();
     svg.setAttribute("width", base.width);
     svg.setAttribute("height", base.height);
     const portBar = (mac, label) =>
       stage.querySelector(`.port[data-device="${CSS.escape(mac)}"][data-port="${CSS.escape(label)}"] .bar`);
+    const selected = this._selected;
     const paths = [];
+    let lane = 0;
     for (const [index, [childMac, up]] of Object.entries(this._uplinkMap).entries()) {
+      const related = selected && (childMac === selected || up.parent === selected);
+      if (compact && !related) continue;
       const childEl = stage.querySelector(`[data-mac="${CSS.escape(childMac)}"]`);
-      // Start at the child's own uplink port if configured, otherwise at the device itself.
       const fromEl = (up.ownPort && portBar(childMac, up.ownPort)) || childEl;
       const toEl = portBar(up.parent, up.port);
       if (!childEl || !fromEl || !toEl) continue;
       const from = fromEl.getBoundingClientRect();
       const to = toEl.getBoundingClientRect();
       const color = getComputedStyle(childEl).getPropertyValue("--wire").trim() || "#22d3ee";
-      const x1 = from.left + from.width / 2 - base.left;
-      const x2 = to.left + to.width / 2 - base.left;
-      const down = from.top < to.top;
-      const y1 = (down ? from.bottom : from.top) - base.top;
-      const y2 = (down ? to.top : to.bottom) - base.top;
-      // Horizontal run through the gap between the source device and the next row,
-      // offset per wire so parallel runs stay distinguishable.
-      const box = childEl.getBoundingClientRect();
-      const edge = (down ? box.bottom : box.top) - base.top;
-      const mid = edge + (down ? 1 : -1) * (14 + (index % 4) * 6);
-      const d = `M${x1},${y1} V${mid} H${x2} V${y2}`;
+      let d, x1, y1, x2, y2;
+      if (compact) {
+        // Along the left edge: out of the device's left side, down the gutter,
+        // into the port from the left.
+        const gutter = 6 + (lane++ % 3) * 5;
+        x1 = from.left - base.left;
+        y1 = from.top - base.top + Math.min(from.height / 2, 40);
+        x2 = to.left - base.left;
+        y2 = to.top - base.top + to.height / 2;
+        d = `M${x1},${y1} H${gutter} V${y2} H${x2}`;
+      } else {
+        x1 = from.left + from.width / 2 - base.left;
+        x2 = to.left + to.width / 2 - base.left;
+        const down = from.top < to.top;
+        y1 = (down ? from.bottom : from.top) - base.top;
+        y2 = (down ? to.top : to.bottom) - base.top;
+        const box = childEl.getBoundingClientRect();
+        const edge = (down ? box.bottom : box.top) - base.top;
+        const mid = edge + (down ? 1 : -1) * (14 + (index % 4) * 6);
+        d = `M${x1},${y1} V${mid} H${x2} V${y2}`;
+      }
+      const dim = selected && !related ? " dim" : "";
       paths.push(`
-        <path d="${d}" class="wire-glow" stroke="${color}"/>
-        <path d="${d}" class="wire" stroke="${color}"/>
-        <circle cx="${x1}" cy="${y1}" r="3.5" fill="${color}" class="dot"/>
-        <circle cx="${x2}" cy="${y2}" r="4" class="ring" stroke="${color}"/>`);
+        <g class="wire-group${dim}">
+          <path d="${d}" class="wire-glow" stroke="${color}"/>
+          <path d="${d}" class="wire" stroke="${color}"/>
+          <circle cx="${x1}" cy="${y1}" r="3.5" fill="${color}" class="dot"/>
+          <circle cx="${x2}" cy="${y2}" r="4" class="ring" stroke="${color}"/>
+        </g>`);
     }
     svg.innerHTML = paths.join("");
   }
 }
 
 const STYLE = `
+  :host { display: block; }
   ha-card { overflow: hidden; border: none; }
   .wrap {
     position: relative; color: var(--text); background: var(--bg);
@@ -492,6 +563,32 @@ const STYLE = `
   .port-label { font-size: 11px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .port-speed { font-size: 9px; color: var(--muted); min-height: 11px; }
   .is-offline { opacity: .6; }
+  .wire-group { transition: opacity .2s; }
+  .wire-group.dim { opacity: .15; }
+  .device.selected, .panel.selected { border-color: var(--wire); box-shadow: 0 0 0 1px var(--wire), 0 0 calc(18px * var(--glow)) color-mix(in srgb, var(--wire) 35%, transparent); }
+  .head-right { display: inline-flex; align-items: center; gap: 6px; }
+  .info {
+    border: 1px solid var(--card-border); background: transparent; color: var(--muted);
+    border-radius: 50%; width: 24px; height: 24px; font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .info:hover { color: var(--text); border-color: var(--accent); }
+  .client-list {
+    margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); text-align: left;
+    display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto;
+  }
+  .panel .client-list { margin: 0; padding: 8px 14px 10px; }
+  .client-row {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer;
+  }
+  .client-row:hover { background: rgba(56, 198, 232, .08); }
+  .client-row i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .client-row .cname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .client-row .cmeta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .empty-list { color: var(--muted); font-size: 12px; text-align: center; }
+  .wrap.compact .stage { padding-left: 24px; gap: 22px; }
+  .wrap.compact .device { width: 100%; }
+  .wrap.compact .header { padding: 14px 16px 12px; }
+  .wrap.compact .chips { margin-left: 0; }
   .footer {
     display: flex; gap: 14px; align-items: center; padding: 10px 18px 12px; font-size: 10px; color: var(--muted);
     border-top: 1px solid var(--line); flex-wrap: wrap;

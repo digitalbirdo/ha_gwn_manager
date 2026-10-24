@@ -42,14 +42,16 @@
           "away_delay": "Abwesend nach",
           "scan_interval": "Intervall für alle übrigen Daten",
           "track_offline_clients": "Offline-Clients einbeziehen",
-          "ssid_filter": "Nur Clients dieser SSIDs verfolgen"
+          "ssid_filter": "Nur Clients dieser SSIDs verfolgen",
+          "manual_uplinks": "Manuelle Zuordnungen"
         },
         "data_description": {
           "presence_interval": "Wie oft geprüft wird, welche Clients verbunden sind. Verbinden und Trennen erscheinen im GWN Manager sofort.",
           "away_delay": "Ein Client gilt erst als abwesend, wenn er so lange getrennt ist – damit Handys mit kurz abgeschaltetem WLAN nicht ständig wechseln. 0 = sofort.",
           "scan_interval": "Offline-Clients, Geräte und Gerätedetails. Der GWN Manager aktualisiert Signalstärke und andere Messwerte nur etwa alle 90 s.",
           "track_offline_clients": "Entitäten für alle dem GWN Manager bekannten Clients anlegen, nicht nur für aktuell verbundene",
-          "ssid_filter": "Leer lassen, um Clients aller SSIDs zu verfolgen. Bereits angelegte Entitäten bleiben erhalten."
+          "ssid_filter": "Leer lassen, um Clients aller SSIDs zu verfolgen. Bereits angelegte Entitäten bleiben erhalten.",
+          "manual_uplinks": "Eine Zeile pro Client: Client = Gerät oder Client = Gerät:Port, mit Namen oder MACs, z. B. \"zigbee-hub = Office AP:LAN\". Für Geräte am LAN-Port eines APs, die der GWN Manager dem Router zuordnet."
         }
       }
     }
