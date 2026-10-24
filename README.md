@@ -25,6 +25,24 @@ for every device connected to your GWN access points.
 - Works with a local GWN Manager (self-signed certificates supported) and GWN.Cloud
 - Diagnostics download with credentials redacted
 
+## Network map card
+
+The integration ships a live, interactive network map card – no extra resource needed.
+Access points hang off the GWN Manager, clients off their access point; link length and
+colour follow the signal strength, and clients float over when they roam.
+
+```yaml
+type: custom:gwn-network-card
+title: Netzwerk          # optional
+height: 450              # px
+show_offline: false      # also show disconnected clients
+show_labels: false       # always show client names (otherwise on hover)
+animate: true            # gentle floating of the bubbles
+```
+
+Drag bubbles around, scroll to zoom, drag the background to pan, double-click to reset.
+Hover for details, click to open the device tracker / AP status.
+
 ## Installation
 
 ### HACS (custom repository)
