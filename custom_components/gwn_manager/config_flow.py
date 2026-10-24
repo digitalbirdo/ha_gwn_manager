@@ -91,6 +91,10 @@ class GWNConfigFlow(ConfigFlow, domain=DOMAIN):
                 ),
                 user_input or {CONF_SERVER_URL: DEFAULT_SERVER_URL},
             ),
+            description_placeholders={
+                "local_example": "https://192.168.1.10:8443",
+                "cloud_example": DEFAULT_SERVER_URL,
+            },
             errors=errors,
         )
 

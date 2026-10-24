@@ -11,7 +11,7 @@
           "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
-          "server_url": "Your GWN Manager, e.g. https://192.168.1.10:8443, or the GWN.Cloud region, e.g. https://eu.gwn.cloud",
+          "server_url": "Your GWN Manager, e.g. {local_example}, or the GWN.Cloud region, e.g. {cloud_example}",
           "app_id": "App ID from API Developer Mode",
           "verify_ssl": "Disable for a GWN Manager with a self-signed certificate"
         }
