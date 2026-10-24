@@ -12,6 +12,7 @@
  *   show_labels: true        # show client names (false: only on hover)
  *   animate: true            # gentle floating of the bubbles
  *   color_by: rssi           # rssi or band; can also be switched on the card
+ *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
@@ -89,6 +90,7 @@ class GwnNetworkCard extends HTMLElement {
       show_labels: true,
       animate: true,
       color_by: "rssi",
+      appearance: "auto",
       ...config,
     };
     this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
@@ -100,7 +102,17 @@ class GwnNetworkCard extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    this._applyAppearance();
     if (first && this.isConnected) this._subscribe();
+  }
+
+  _applyAppearance() {
+    const wrap = this.shadowRoot?.querySelector(".wrap");
+    if (!wrap) return;
+    const mode = this._config.appearance;
+    const dark = mode === "dark" || (mode !== "light" && Boolean(this._hass?.themes?.darkMode));
+    wrap.classList.toggle("dark", dark);
+    wrap.classList.toggle("light", !dark);
   }
 
   getCardSize() {
@@ -290,73 +302,148 @@ class GwnNetworkCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         ha-card { overflow: hidden; }
-        .wrap { position: relative; height: ${Number(this._config.height)}px; touch-action: none; }
+        .wrap {
+          position: relative; height: ${Number(this._config.height)}px; touch-action: none;
+          color: var(--gwn-text);
+          background: var(--gwn-bg);
+          transition: background .4s;
+        }
+        .wrap.light {
+          --gwn-bg: radial-gradient(ellipse at 50% 35%, #ffffff 0%, #eef2f9 100%);
+          --gwn-text: #1c2333;
+          --gwn-muted: #5f6b80;
+          --gwn-halo: rgba(255, 255, 255, .9);
+          --gwn-chip-bg: rgba(255, 255, 255, .7);
+          --gwn-chip-border: rgba(28, 35, 51, .1);
+          --gwn-backbone: rgba(28, 35, 51, .16);
+          --gwn-node-stroke: #ffffff;
+          --gwn-tooltip-bg: rgba(255, 255, 255, .92);
+          --gwn-shadow: 0 6px 24px rgba(28, 35, 51, .14);
+          --gwn-node-filter: drop-shadow(0 1px 2px rgba(28, 35, 51, .25));
+          --gwn-link-filter: none;
+        }
+        .wrap.dark {
+          --gwn-bg: radial-gradient(ellipse at 50% 35%, #1d2742 0%, #0c111d 75%);
+          --gwn-text: #e8edff;
+          --gwn-muted: #8f9bb8;
+          --gwn-halo: rgba(12, 17, 29, .85);
+          --gwn-chip-bg: rgba(255, 255, 255, .06);
+          --gwn-chip-border: rgba(255, 255, 255, .12);
+          --gwn-backbone: rgba(140, 170, 255, .22);
+          --gwn-node-stroke: rgba(255, 255, 255, .35);
+          --gwn-tooltip-bg: rgba(18, 24, 40, .88);
+          --gwn-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+          --gwn-node-filter: url(#gwn-glow);
+          --gwn-link-filter: url(#gwn-glow-soft);
+        }
+        .title {
+          position: absolute; left: 16px; top: 12px; z-index: 1;
+          font-size: 18px; font-weight: 500; letter-spacing: .2px; pointer-events: none;
+        }
         svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
         svg.panning { cursor: grabbing; }
-        .link { stroke-linecap: round; }
+        .link { stroke-linecap: round; filter: var(--gwn-link-filter); }
+        .link.backbone { stroke: var(--gwn-backbone); }
         .link.offline { stroke-dasharray: 3 4; opacity: .35; }
         .node { cursor: pointer; }
-        .node circle { stroke: var(--card-background-color, #fff); stroke-width: 2; transition: r .3s; }
-        .node.root circle { fill: var(--primary-color); }
-        .node.ap circle { fill: var(--info-color, #039be5); }
-        .node.ap.offline circle { fill: var(--error-color, #db4437); }
-        .node.client.offline circle { opacity: .45; }
+        .node circle.body {
+          stroke: var(--gwn-node-stroke); stroke-width: 1.5;
+          filter: var(--gwn-node-filter); transition: r .3s;
+        }
+        .node.root circle.body { fill: url(#gwn-root); }
+        .node.ap circle.body { fill: url(#gwn-ap); }
+        .node.ap.offline circle.body { fill: url(#gwn-offline); }
+        .node.client.offline circle.body { opacity: .4; }
+        .node circle.pulse {
+          fill: none; stroke: #4fc3ff; stroke-width: 2; opacity: 0; pointer-events: none;
+          transform-box: fill-box; transform-origin: center;
+          animation: gwn-pulse 3.2s ease-out infinite;
+        }
+        .node.ap.offline circle.pulse { stroke: #ff6b6b; }
+        @keyframes gwn-pulse {
+          0% { transform: scale(1); opacity: .55; }
+          100% { transform: scale(1.9); opacity: 0; }
+        }
         .node text {
           font: 11px var(--paper-font-body1_-_font-family, sans-serif);
-          fill: var(--primary-text-color); paint-order: stroke;
-          stroke: var(--card-background-color, #fff); stroke-width: 3px;
+          fill: var(--gwn-text); paint-order: stroke;
+          stroke: var(--gwn-halo); stroke-width: 3px; stroke-linejoin: round;
           pointer-events: none;
         }
         .node.ap text, .node.root text { font-weight: 600; font-size: 12px; }
-        .node.client text { display: ${this._config.show_labels ? "block" : "none"}; }
-        .node.client:hover text, .node.client.hover text { display: block; }
-        .node .count { font-size: 10px; fill: #fff; stroke: none; font-weight: 600; }
+        .node.client text { display: ${this._config.show_labels ? "block" : "none"}; fill: var(--gwn-muted); }
+        .node.client:hover text, .node.client.hover text { display: block; fill: var(--gwn-text); }
+        .node .count { font-size: 10px; fill: #fff; stroke: none; font-weight: 700; }
         .tooltip {
-          position: absolute; pointer-events: none; display: none; z-index: 1;
-          background: var(--card-background-color, #fff); color: var(--primary-text-color);
-          border: 1px solid var(--divider-color, #ddd); border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 8px 10px;
-          font-size: 12px; line-height: 1.5; max-width: 240px;
+          position: absolute; pointer-events: none; display: none; z-index: 2;
+          background: var(--gwn-tooltip-bg); color: var(--gwn-text);
+          border: 1px solid var(--gwn-chip-border); border-radius: 12px;
+          box-shadow: var(--gwn-shadow); padding: 10px 12px;
+          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          font-size: 12px; line-height: 1.55; max-width: 260px;
         }
         .tooltip b { font-size: 13px; }
-        .tooltip .muted { color: var(--secondary-text-color); }
-        .legend {
-          position: absolute; left: 12px; bottom: 8px; display: flex; gap: 10px;
-          font-size: 11px; color: var(--secondary-text-color); pointer-events: none;
+        .tooltip .muted { color: var(--gwn-muted); }
+        .chip {
+          position: absolute; bottom: 10px; display: flex; align-items: center;
+          background: var(--gwn-chip-bg); border: 1px solid var(--gwn-chip-border);
+          border-radius: 999px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          font-size: 11px; color: var(--gwn-muted);
         }
+        .legend { left: 12px; gap: 12px; padding: 4px 12px; pointer-events: none; }
         .legend span::before {
-          content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-          margin-right: 4px; background: var(--c); vertical-align: -1px;
+          content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+          margin-right: 5px; background: var(--c); box-shadow: 0 0 6px var(--c); vertical-align: 0;
         }
-        .error { padding: 16px; color: var(--error-color, #db4437); }
-        .modes {
-          position: absolute; right: 10px; bottom: 6px; display: flex;
-          border: 1px solid var(--divider-color, #ddd); border-radius: 14px; overflow: hidden;
-        }
+        .modes { right: 12px; padding: 2px; gap: 2px; }
         .modes button {
-          border: 0; background: transparent; color: var(--secondary-text-color);
-          font-size: 11px; padding: 3px 10px; cursor: pointer;
+          border: 0; background: transparent; color: var(--gwn-muted); border-radius: 999px;
+          font-size: 11px; padding: 4px 12px; cursor: pointer; transition: background .2s, color .2s;
         }
         .modes button.active { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+        .error { padding: 16px; color: var(--error-color, #db4437); }
       </style>
-      <ha-card header="${escapeHtml(this._config.title ?? "")}">
+      <ha-card>
         <div class="wrap">
+          ${this._config.title ? `<div class="title">${escapeHtml(this._config.title)}</div>` : ""}
           <svg>
+            <defs>
+              <radialGradient id="gwn-ap" cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stop-color="#6fd3ff"/>
+                <stop offset="100%" stop-color="#0277bd"/>
+              </radialGradient>
+              <radialGradient id="gwn-root" cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stop-color="#b39dff"/>
+                <stop offset="100%" stop-color="#4527a0"/>
+              </radialGradient>
+              <radialGradient id="gwn-offline" cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stop-color="#ff8a80"/>
+                <stop offset="100%" stop-color="#b71c1c"/>
+              </radialGradient>
+              <filter id="gwn-glow" x="-100%" y="-100%" width="300%" height="300%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="gwn-glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
             <g class="viewport">
               <g class="links"></g>
               <g class="nodes"></g>
             </g>
           </svg>
           <div class="tooltip"></div>
-          <div class="legend"></div>
-          <div class="modes">
+          <div class="chip legend"></div>
+          <div class="chip modes">
             <button data-mode="rssi">Signal</button>
             <button data-mode="band">Band</button>
           </div>
         </div>
         <div class="error" hidden></div>
       </ha-card>`;
-    if (!this._config.title) this.shadowRoot.querySelector("ha-card").removeAttribute("header");
+    this._applyAppearance();
     this._svg = this.shadowRoot.querySelector("svg");
     this._viewport = this.shadowRoot.querySelector(".viewport");
     this._linkLayer = this.shadowRoot.querySelector(".links");
@@ -430,8 +517,18 @@ class GwnNetworkCard extends HTMLElement {
       let el = this._elements.get(node.id);
       if (!el) {
         el = document.createElementNS(SVG_NS, "g");
-        el.appendChild(document.createElementNS(SVG_NS, "circle"));
+        if (node.type === "ap") {
+          // Animated ring behind the AP; staggered so they don't pulse in sync.
+          const pulse = document.createElementNS(SVG_NS, "circle");
+          pulse.setAttribute("class", "pulse");
+          pulse.style.animationDelay = `${(Math.random() * 3).toFixed(2)}s`;
+          el.appendChild(pulse);
+        }
+        const body = document.createElementNS(SVG_NS, "circle");
+        body.setAttribute("class", "body");
+        el.appendChild(body);
         const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("class", "label");
         label.setAttribute("text-anchor", "middle");
         el.appendChild(label);
         if (node.type === "ap") {
@@ -448,13 +545,14 @@ class GwnNetworkCard extends HTMLElement {
       const d = node.data;
       const offline = node.type === "ap" ? !d.online : node.type === "client" && !d.connected;
       el.setAttribute("class", `node ${node.type}${offline ? " offline" : ""}`);
-      const circle = el.firstChild;
-      const label = el.childNodes[1];
+      const circle = el.querySelector(".body");
+      const label = el.querySelector(".label");
       let r = RADIUS[node.type];
       if (node.type === "ap") {
         const n = this._links.filter((l) => l.source === node).length;
         r += Math.min(Math.sqrt(n) * 2, 10);
-        el.childNodes[2].textContent = n || "";
+        el.querySelector(".count").textContent = n || "";
+        el.querySelector(".pulse").setAttribute("r", r);
       }
       if (node.type === "client") circle.setAttribute("fill", this._clientColor(d));
       circle.setAttribute("r", r);
@@ -473,10 +571,11 @@ class GwnNetworkCard extends HTMLElement {
     this._links.forEach((link, i) => {
       const line = this._linkElements[i];
       const isClient = link.target.type === "client";
-      line.setAttribute("class", `link${link.offline ? " offline" : ""}`);
-      line.setAttribute("stroke", isClient ? this._clientColor(link.target.data) : "var(--divider-color, #bbb)");
+      line.setAttribute("class", `link${isClient ? "" : " backbone"}${link.offline ? " offline" : ""}`);
+      if (isClient) line.setAttribute("stroke", this._clientColor(link.target.data));
+      else line.removeAttribute("stroke");
       line.setAttribute("stroke-width", isClient ? 1.5 : 3);
-      line.setAttribute("stroke-opacity", isClient ? 0.6 : 0.9);
+      line.setAttribute("stroke-opacity", isClient ? 0.7 : 1);
     });
   }
 

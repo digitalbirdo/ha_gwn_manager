@@ -48,6 +48,7 @@ show_offline: false      # also show disconnected clients
 show_labels: true        # show client names (false: only on hover)
 animate: true            # gentle floating of the bubbles
 color_by: rssi           # rssi or band (2.4 / 5 / 6 GHz); can also be switched on the card
+appearance: auto         # auto (follows the Home Assistant dark mode), dark or light
 ```
 
 The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background
