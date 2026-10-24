@@ -11,10 +11,11 @@
  *   show_offline: false      # also show disconnected clients
  *   show_labels: true        # show client names (false: only on hover)
  *   animate: true            # gentle floating of the bubbles
+ *   color_by: rssi           # rssi or band; can also be switched on the card
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -35,11 +36,26 @@ function rssiColor(rssi) {
   return "var(--error-color, #db4437)";
 }
 
+const BAND_COLORS = {
+  "2.4G": "#ff9800",
+  "5G": "#1e88e5",
+  "6G": "#8e24aa",
+};
+
+function bandColor(band) {
+  return BAND_COLORS[band] || "var(--disabled-text-color, #9e9e9e)";
+}
+
 function linkLength(rssi) {
   // Stronger signal = shorter link: -30 dBm -> 45 px, -90 dBm -> 165 px
   if (rssi === null || rssi === undefined) return 120;
   return 45 + Math.min(Math.max(-rssi - 30, 0), 60) * 2;
 }
+
+const STRINGS = {
+  en: { channel: "Channel", offline: "Offline", clients: "clients", signal: "Signal", band: "Band" },
+  de: { channel: "Kanal", offline: "Offline", clients: "Clients", signal: "Signal", band: "Band" },
+};
 
 function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({
@@ -72,8 +88,10 @@ class GwnNetworkCard extends HTMLElement {
       show_offline: false,
       show_labels: true,
       animate: true,
+      color_by: "rssi",
       ...config,
     };
+    this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
     // Labels need more room between the bubbles.
     this._spread = this._config.show_labels ? 2.2 : 1;
     this._render();
@@ -311,6 +329,15 @@ class GwnNetworkCard extends HTMLElement {
           margin-right: 4px; background: var(--c); vertical-align: -1px;
         }
         .error { padding: 16px; color: var(--error-color, #db4437); }
+        .modes {
+          position: absolute; right: 10px; bottom: 6px; display: flex;
+          border: 1px solid var(--divider-color, #ddd); border-radius: 14px; overflow: hidden;
+        }
+        .modes button {
+          border: 0; background: transparent; color: var(--secondary-text-color);
+          font-size: 11px; padding: 3px 10px; cursor: pointer;
+        }
+        .modes button.active { background: var(--primary-color); color: var(--text-primary-color, #fff); }
       </style>
       <ha-card header="${escapeHtml(this._config.title ?? "")}">
         <div class="wrap">
@@ -321,11 +348,10 @@ class GwnNetworkCard extends HTMLElement {
             </g>
           </svg>
           <div class="tooltip"></div>
-          <div class="legend">
-            <span style="--c: var(--success-color, #43a047)">≥ −60 dBm</span>
-            <span style="--c: #9ccc65">≥ −70</span>
-            <span style="--c: var(--warning-color, #ffa600)">≥ −80</span>
-            <span style="--c: var(--error-color, #db4437)">&lt; −80</span>
+          <div class="legend"></div>
+          <div class="modes">
+            <button data-mode="rssi">Signal</button>
+            <button data-mode="band">Band</button>
           </div>
         </div>
         <div class="error" hidden></div>
@@ -338,9 +364,35 @@ class GwnNetworkCard extends HTMLElement {
     this._tooltip = this.shadowRoot.querySelector(".tooltip");
     this._elements = new Map();
     this._linkElements = [];
+    for (const button of this.shadowRoot.querySelectorAll(".modes button")) {
+      button.addEventListener("click", () => {
+        this._colorBy = button.dataset.mode;
+        this._renderLegend();
+        this._syncElements();
+      });
+    }
+    this._renderLegend();
     this._setupPanZoom();
     this._resize();
     if (this._nodes.size) this._syncElements();
+  }
+
+  _renderLegend() {
+    const legend = this.shadowRoot.querySelector(".legend");
+    const items = this._colorBy === "band"
+      ? Object.entries(BAND_COLORS).map(([band, color]) => [color, band.replace("G", " GHz")])
+      : [
+          ["var(--success-color, #43a047)", "≥ −60 dBm"],
+          ["#9ccc65", "≥ −70"],
+          ["var(--warning-color, #ffa600)", "≥ −80"],
+          ["var(--error-color, #db4437)", "< −80"],
+        ];
+    legend.innerHTML = items
+      .map(([color, label]) => `<span style="--c: ${color}">${escapeHtml(label)}</span>`)
+      .join("");
+    for (const button of this.shadowRoot.querySelectorAll(".modes button")) {
+      button.classList.toggle("active", button.dataset.mode === this._colorBy);
+    }
   }
 
   _resize() {
@@ -353,6 +405,15 @@ class GwnNetworkCard extends HTMLElement {
     if (!el) return;
     el.hidden = !message;
     el.textContent = message ? `GWN Manager: ${message}` : "";
+  }
+
+  _t(key) {
+    const lang = (this._hass?.language || "en").split("-")[0];
+    return (STRINGS[lang] || STRINGS.en)[key];
+  }
+
+  _clientColor(data) {
+    return this._colorBy === "band" ? bandColor(data.band) : rssiColor(data.rssi);
   }
 
   _syncElements() {
@@ -395,7 +456,7 @@ class GwnNetworkCard extends HTMLElement {
         r += Math.min(Math.sqrt(n) * 2, 10);
         el.childNodes[2].textContent = n || "";
       }
-      if (node.type === "client") circle.setAttribute("fill", rssiColor(d.rssi));
+      if (node.type === "client") circle.setAttribute("fill", this._clientColor(d));
       circle.setAttribute("r", r);
       label.setAttribute("dy", r + 13);
       label.textContent = d.name;
@@ -413,7 +474,7 @@ class GwnNetworkCard extends HTMLElement {
       const line = this._linkElements[i];
       const isClient = link.target.type === "client";
       line.setAttribute("class", `link${link.offline ? " offline" : ""}`);
-      line.setAttribute("stroke", isClient ? rssiColor(link.rssi) : "var(--divider-color, #bbb)");
+      line.setAttribute("stroke", isClient ? this._clientColor(link.target.data) : "var(--divider-color, #bbb)");
       line.setAttribute("stroke-width", isClient ? 1.5 : 3);
       line.setAttribute("stroke-opacity", isClient ? 0.6 : 0.9);
     });
@@ -560,15 +621,16 @@ class GwnNetworkCard extends HTMLElement {
     } else if (node.type === "ap") {
       html = `<b>${escapeHtml(d.name)}</b><br>
         <span class="muted">${escapeHtml(d.model ?? "")}${d.area ? " · " + escapeHtml(d.area) : ""}</span><br>
-        ${d.online ? "Online" : "Offline"} · ${escapeHtml(d.clients ?? 0)} Clients<br>
+        ${d.online ? "Online" : this._t("offline")} · ${escapeHtml(d.clients ?? 0)} ${this._t("clients")}<br>
         <span class="muted">${escapeHtml(d.ip ?? "")}</span>`;
     } else {
       const ap = d.ap ? this._nodes.get(`ap:${d.ap}`)?.data?.name : null;
       html = `<b>${escapeHtml(d.name)}</b><br>
         ${d.connected
-          ? `${escapeHtml(ap ?? "")}${d.band ? " · " + escapeHtml(d.band) : ""}${d.rssi != null ? " · " + escapeHtml(d.rssi) + " dBm" : ""}<br>
+          ? `${escapeHtml(ap ?? "")}${d.rssi != null ? " · " + escapeHtml(d.rssi) + " dBm" : ""}<br>
+             ${d.band ? escapeHtml(d.band.replace("G", " GHz")) : ""}${d.channel != null ? ` · ${this._t("channel")} ` + escapeHtml(d.channel) : ""}<br>
              <span class="muted">${escapeHtml(d.ssid ?? "")}</span><br>`
-          : `<span class="muted">Offline</span><br>`}
+          : `<span class="muted">${this._t("offline")}</span><br>`}
         <span class="muted">${escapeHtml(d.ip ?? "")} · ${escapeHtml(d.mac)}</span>`;
     }
     const tip = this._tooltip;

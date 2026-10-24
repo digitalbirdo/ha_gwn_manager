@@ -12,8 +12,8 @@ for every device connected to your GWN access points.
 ## Features
 
 - **Device tracker** per client (`home` / `not_home`), usable for presence and the `person` integration
-- Per-client sensors: signal strength, access point, SSID, band, last seen, IP address
-  (disabled by default: connected since, channel, link rates, traffic, VLAN)
+- Per-client sensors: signal strength, access point, SSID, band, channel, last seen, IP address
+  (disabled by default: connected since, link rates, traffic, VLAN)
 - Clients are linked to the access point they are connected to ("Connected via"), following roaming
 - **Area** sensor per client: the area of its current access point (assign areas to your APs for room-level presence)
 - **Network access switch** per client (block / unblock), disabled by default
@@ -47,6 +47,7 @@ height: 450              # px
 show_offline: false      # also show disconnected clients
 show_labels: true        # show client names (false: only on hover)
 animate: true            # gentle floating of the bubbles
+color_by: rssi           # rssi or band (2.4 / 5 / 6 GHz); can also be switched on the card
 ```
 
 The view zooms to fit automatically. Drag bubbles around, scroll to zoom, drag the background

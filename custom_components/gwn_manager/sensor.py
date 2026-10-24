@@ -193,7 +193,6 @@ CLIENT_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
     GWNSensorEntityDescription(
         key="channel",
         translation_key="channel",
-        entity_registry_enabled_default=False,
         value_fn=_live("channel"),
     ),
     GWNSensorEntityDescription(

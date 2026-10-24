@@ -65,6 +65,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "ap": (client.get("apId") or "").upper() or None,
                 "rssi": client.get("rssi") if client.get("connected") else None,
                 "band": client.get("channelClassStr") if client.get("connected") else None,
+                "channel": client.get("channel") if client.get("connected") else None,
                 "ssid": client.get("ssid"),
                 "ip": client.get("ipv4") or None,
                 "device_id": device_id,
