@@ -5,6 +5,7 @@ from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
@@ -42,11 +43,38 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             for card in CARDS
         ]
     )
-    # Load the cards in every frontend; the version busts the browser cache.
-    for card in CARDS:
-        add_extra_js_url(hass, f"/gwn_manager/{card}?v={version}")
+    await _async_register_cards(hass, version)
     async_register_websocket(hass)
     return True
+
+
+async def _async_register_cards(hass: HomeAssistant, version: str) -> None:
+    """Make the cards available in the frontend.
+
+    Registers them as dashboard resources (what custom cards normally use, and
+    what the mobile apps reliably load), keeping the version query current to
+    bust caches. Falls back to an extra frontend module for YAML resources.
+    """
+    lovelace = hass.data.get(LOVELACE_DATA)
+    if lovelace is None or lovelace.resource_mode != "storage":
+        for card in CARDS:
+            add_extra_js_url(hass, f"/gwn_manager/{card}?v={version}")
+        return
+
+    resources = lovelace.resources
+    await resources.async_get_info()  # loads the stored resources
+    for card in CARDS:
+        path = f"/gwn_manager/{card}"
+        url = f"{path}?v={version}"
+        existing = [item for item in resources.async_items() if item["url"].split("?")[0] == path]
+        if not existing:
+            await resources.async_create_item({"res_type": "module", "url": url})
+            continue
+        first, *duplicates = existing
+        if first["url"] != url:
+            await resources.async_update_item(first["id"], {"res_type": "module", "url": url})
+        for item in duplicates:
+            await resources.async_delete_item(item["id"])
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> bool:
