@@ -1,613 +1,250 @@
-"""Sensor platform for Grandstream GWN Manager."""
+"""Sensors for GWN Manager clients and access points."""
 from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
-    UnitOfInformation,
+    EntityCategory,
     UnitOfDataRate,
+    UnitOfInformation,
     UnitOfTime,
-    UnitOfTemperature,
 )
-from datetime import datetime
-import pytz
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .coordinator import GWNConfigEntry, GWNCoordinator, parse_timestamp
+from .entity import (
+    GWNAPEntity,
+    GWNClientEntity,
+    async_setup_ap_entities,
+    async_setup_client_entities,
+)
+
+PARALLEL_UPDATES = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class GWNSensorEntityDescription(SensorEntityDescription):
+    """Describes a GWN sensor."""
+
+    value_fn: Callable[[dict[str, Any]], StateType | datetime]
+
+
+def _live(key: str) -> Callable[[dict[str, Any]], Any]:
+    """Value that only makes sense while the client is connected."""
+    return lambda client: client.get(key) if client["connected"] else None
+
+
+def _last_seen(client: dict[str, Any]) -> datetime | None:
+    if client["connected"] and (ts := parse_timestamp(client.get("lastactive"))):
+        return ts
+    return parse_timestamp(client.get("lastSeen"))
+
+
+def _connected_since(client: dict[str, Any]) -> datetime | None:
+    seconds = client.get("assocSecond")
+    if not client["connected"] or seconds is None:
+        return None
+    # Round to the minute so the state does not change on every poll.
+    since = dt_util.utcnow() - timedelta(seconds=int(seconds))
+    return since.replace(second=0, microsecond=0)
+
+
+CLIENT_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
+    GWNSensorEntityDescription(
+        key="rssi",
+        translation_key="rssi",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_live("rssi"),
+    ),
+    GWNSensorEntityDescription(
+        key="access_point",
+        translation_key="access_point",
+        value_fn=_live("apName"),
+    ),
+    GWNSensorEntityDescription(
+        key="ssid",
+        translation_key="ssid",
+        value_fn=_live("ssid"),
+    ),
+    GWNSensorEntityDescription(
+        key="band",
+        translation_key="band",
+        value_fn=_live("channelClassStr"),
+    ),
+    GWNSensorEntityDescription(
+        key="last_seen",
+        translation_key="last_seen",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_last_seen,
+    ),
+    GWNSensorEntityDescription(
+        key="connected_since",
+        translation_key="connected_since",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_registry_enabled_default=False,
+        value_fn=_connected_since,
+    ),
+    GWNSensorEntityDescription(
+        key="channel",
+        translation_key="channel",
+        entity_registry_enabled_default=False,
+        value_fn=_live("channel"),
+    ),
+    GWNSensorEntityDescription(
+        key="tx_rate",
+        translation_key="tx_rate",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=_live("txRate"),
+    ),
+    GWNSensorEntityDescription(
+        key="rx_rate",
+        translation_key="rx_rate",
+        device_class=SensorDeviceClass.DATA_RATE,
+        native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=_live("rxRate"),
+    ),
+    GWNSensorEntityDescription(
+        key="tx_bytes",
+        translation_key="tx_bytes",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+        value_fn=lambda client: client.get("txBytes"),
+    ),
+    GWNSensorEntityDescription(
+        key="rx_bytes",
+        translation_key="rx_bytes",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+        value_fn=lambda client: client.get("rxBytes"),
+    ),
+    GWNSensorEntityDescription(
+        key="ip_address",
+        translation_key="ip_address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda client: client.get("ipv4") or None,
+    ),
+    GWNSensorEntityDescription(
+        key="vlan",
+        translation_key="vlan",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda client: client.get("vlanId"),
+    ),
+)
+
+AP_SENSORS: tuple[GWNSensorEntityDescription, ...] = (
+    GWNSensorEntityDescription(
+        key="clients",
+        translation_key="clients",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda ap: ap.get("clients"),
+    ),
+    GWNSensorEntityDescription(
+        key="uptime",
+        translation_key="uptime",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_display_precision=1,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda ap: ap.get("upTime"),
+    ),
+    GWNSensorEntityDescription(
+        key="firmware",
+        translation_key="firmware",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda ap: ap.get("versionFirmware"),
+    ),
+    GWNSensorEntityDescription(
+        key="ip_address",
+        translation_key="ip_address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda ap: ap.get("ipv4") or ap.get("ip") or None,
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: GWNConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the GWN Manager sensors for clients and APs as dedicated devices."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-
-    entities = []
-    
-    # Create sensors for each AP
-    aps = coordinator.data.get("aps", [])
-    for ap in aps:
-        entities.append(GWNAPStatusSensor(coordinator, ap))
-        entities.append(GWNAPUpTimeSensor(coordinator, ap))
-        entities.append(GWNAPClientsCountSensor(coordinator, ap))
-        entities.append(GWNAPUsageSensor(coordinator, ap))
-        entities.append(GWNAPUploadSensor(coordinator, ap))
-        entities.append(GWNAPDownloadSensor(coordinator, ap))
-        entities.append(GWNAPFirmwareSensor(coordinator, ap))
-        entities.append(GWNAPIPv4Sensor(coordinator, ap))
-        entities.append(GWNAPIPv6Sensor(coordinator, ap))
-    
-    # Create sensors for each client
-    clients = coordinator.data.get("clients", [])
-    for client in clients:
-        # Create sensors for each client
-        entities.append(GWNClientRSSISensor(coordinator, client))
-        entities.append(GWNClientAPSensor(coordinator, client))
-        entities.append(GWNClientStatusSensor(coordinator, client))
-        entities.append(GWNClientSSIDSensor(coordinator, client))
-        entities.append(GWNClientTxBytesSensor(coordinator, client))
-        entities.append(GWNClientRxBytesSensor(coordinator, client))
-        entities.append(GWNClientTxRateSensor(coordinator, client))
-        entities.append(GWNClientRxRateSensor(coordinator, client))
-        entities.append(GWNClientLastSeenSensor(coordinator, client))
-        entities.append(GWNClientIPv4Sensor(coordinator, client))
-        entities.append(GWNClientIPv6Sensor(coordinator, client))
-        entities.append(GWNClientChannelClassSensor(coordinator, client))
-        entities.append(GWNClientVlanIdSensor(coordinator, client))
-
-    async_add_entities(entities)
+    """Set up sensors for clients and access points."""
+    async_setup_client_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, mac: [
+            GWNClientSensor(coordinator, mac, description) for description in CLIENT_SENSORS
+        ],
+    )
+    async_setup_ap_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, mac: [
+            GWNAPSensor(coordinator, mac, description) for description in AP_SENSORS
+        ],
+    )
 
 
-class GWNAPBaseSensor(CoordinatorEntity, SensorEntity):
-    """Base class for GWN AP sensors."""
+class GWNClientSensor(GWNClientEntity, SensorEntity):
+    """A sensor of a network client."""
 
-    def __init__(self, coordinator, ap_data):
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._ap_mac = ap_data["mac"]
-        self._ap_name = ap_data["name"]
-        
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information about this entity."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._ap_mac)},
-            name=self._ap_name,
-            manufacturer="Grandstream",
-            model=self._ap_data.get("apType", "GWN AP"),
-        )
+    entity_description: GWNSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: GWNCoordinator,
+        mac: str,
+        description: GWNSensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, mac, description.key)
+        self.entity_description = description
 
     @property
-    def _ap_data(self):
-        """Get the latest data for this AP from the coordinator."""
-        # Find the AP in the current data
-        aps = self.coordinator.data.get("aps", [])
-        for ap in aps:
-            if ap["mac"] == self._ap_mac:
-                return ap
-        return None
+    def native_value(self) -> StateType | datetime:
+        return self.entity_description.value_fn(self.client)
+
+
+class GWNAPSensor(GWNAPEntity, SensorEntity):
+    """A sensor of an access point."""
+
+    entity_description: GWNSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: GWNCoordinator,
+        mac: str,
+        description: GWNSensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, mac, description.key)
+        self.entity_description = description
 
     @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return super().available and self._ap_data is not None
-
-
-class GWNAPStatusSensor(GWNAPBaseSensor):
-    """Sensor for AP Status."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_status"
-        self._attr_name = "Status"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return "Online" if data.get("status", 0) else "Offline"
-        return None
-
-
-class GWNAPUpTimeSensor(GWNAPBaseSensor):
-    """Sensor for AP Uptime."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_uptime"
-        self._attr_name = "Uptime"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("upTime", 0)
-        return None
-
-
-class GWNAPClientsCountSensor(GWNAPBaseSensor):
-    """Sensor for AP connected clients count."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_clients_count"
-        self._attr_name = "Connected Clients"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("clients", 0)
-        return None
-
-
-class GWNAPUsageSensor(GWNAPBaseSensor):
-    """Sensor for AP total usage."""
-
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_usage"
-        self._attr_name = "Total Usage"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("usage", 0)
-        return None
-
-
-class GWNAPUploadSensor(GWNAPBaseSensor):
-    """Sensor for AP upload."""
-
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_upload"
-        self._attr_name = "Upload"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("upload", 0)
-        return None
-
-
-class GWNAPDownloadSensor(GWNAPBaseSensor):
-    """Sensor for AP download."""
-
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_download"
-        self._attr_name = "Download"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("download", 0)
-        return None
-
-
-class GWNAPFirmwareSensor(GWNAPBaseSensor):
-    """Sensor for AP firmware version."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_firmware"
-        self._attr_name = "Firmware Version"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("versionFirmware", "Unknown")
-        return None
-
-
-class GWNAPIPv4Sensor(GWNAPBaseSensor):
-    """Sensor for AP IPv4 address."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_ipv4"
-        self._attr_name = "IPv4 Address"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("ipv4", "")
-        return None
-
-
-class GWNAPIPv6Sensor(GWNAPBaseSensor):
-    """Sensor for AP IPv6 address."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, ap_data):
-        super().__init__(coordinator, ap_data)
-        self._attr_unique_id = f"{self._ap_mac}_ipv6"
-        self._attr_name = "IPv6 Address"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._ap_data
-        if data:
-            return data.get("ipv6", "")
-        return None
-
-
-class GWNClientBaseSensor(CoordinatorEntity, SensorEntity):
-    """Base class for GWN Client sensors."""
-
-    def __init__(self, coordinator, client_data):
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._client_mac = client_data["mac"]
-        self._client_name = client_data["name"]
-        self._ap_name = client_data.get("ap_name", "Unknown AP")
-        self._ap_mac = client_data.get("ap_mac", "")
-        
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information about this entity."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._client_mac)},
-            name=self._client_name,
-            manufacturer="Grandstream",
-            model="Network Client",
-            suggested_area=self._ap_name,
-            via_device=(DOMAIN, self._ap_mac) if self._ap_mac else None,
-        )
-
-    @property
-    def _client_data(self):
-        """Get the latest data for this client from the coordinator."""
-        # Find the client in the current data
-        clients = self.coordinator.data.get("clients", [])
-        for client in clients:
-            if client["mac"] == self._client_mac:
-                return client
-        return None
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return super().available and self._client_data is not None
-
-
-class GWNClientRSSISensor(GWNClientBaseSensor):
-    """Sensor for Client RSSI."""
-
-    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_rssi"
-        self._attr_name = "RSSI"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("rssi")
-        return None
-
-
-class GWNClientAPSensor(GWNClientBaseSensor):
-    """Sensor for Client Connected AP."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_ap"
-        self._attr_name = "Connected AP"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("ap_name", "Unknown")
-        return None
-
-
-class GWNClientStatusSensor(GWNClientBaseSensor):
-    """Sensor for Client Online Status."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_status"
-        self._attr_name = "Status"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return "Online" if data.get("online", 0) else "Offline"
-        return None
-
-
-class GWNClientSSIDSensor(GWNClientBaseSensor):
-    """Sensor for Client SSID."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_ssid"
-        self._attr_name = "SSID"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("ssid", "Unknown")
-        return None
-
-
-class GWNClientTxBytesSensor(GWNClientBaseSensor):
-    """Sensor for Client TX Bytes."""
-
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_tx_bytes"
-        self._attr_name = "TX Bytes"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("tx_bytes", 0)
-        return None
-
-
-class GWNClientRxBytesSensor(GWNClientBaseSensor):
-    """Sensor for Client RX Bytes."""
-
-    _attr_device_class = SensorDeviceClass.DATA_SIZE
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_rx_bytes"
-        self._attr_name = "RX Bytes"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("rx_bytes", 0)
-        return None
-
-
-class GWNClientTxRateSensor(GWNClientBaseSensor):
-    """Sensor for Client TX Rate."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfDataRate.KILOBITS_PER_SECOND
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_tx_rate"
-        self._attr_name = "TX Rate"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("tx_rate", 0)
-        return None
-
-
-class GWNClientRxRateSensor(GWNClientBaseSensor):
-    """Sensor for Client RX Rate."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfDataRate.KILOBITS_PER_SECOND
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_rx_rate"
-        self._attr_name = "RX Rate"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("rx_rate", 0)
-        return None
-
-
-class GWNClientLastSeenSensor(GWNClientBaseSensor):
-    """Sensor for time since client was last seen."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_last_seen_seconds"
-        self._attr_name = "Last Seen"
-
-    @property
-    def native_value(self):
-        """Return seconds since last active."""
-        data = self._client_data
-        if data:
-            lastactive = data.get("lastactive")
-            if lastactive:
-                try:
-                    # Parse ISO 8601 timestamp
-                    last_time = datetime.fromisoformat(lastactive.replace("Z", "+00:00"))
-                    now = datetime.now(pytz.UTC)
-                    delta = (now - last_time).total_seconds()
-                    return max(0, int(delta))
-                except (ValueError, TypeError):
-                    return None
-        return None
-
-
-class GWNClientIPv4Sensor(GWNClientBaseSensor):
-    """Sensor for Client IPv4 address."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_ipv4"
-        self._attr_name = "IPv4 Address"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("ipv4", "")
-        return None
-
-
-class GWNClientIPv6Sensor(GWNClientBaseSensor):
-    """Sensor for Client IPv6 address."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_ipv6"
-        self._attr_name = "IPv6 Address"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("ipv6", "")
-        return None
-
-
-class GWNClientChannelClassSensor(GWNClientBaseSensor):
-    """Sensor for Client channel class (2G/5G/6G)."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_channel_class"
-        self._attr_name = "Channel Class"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("channelClassStr", "Unknown")
-        return None
-
-
-class GWNClientVlanIdSensor(GWNClientBaseSensor):
-    """Sensor for Client VLAN ID."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_vlan_id"
-        self._attr_name = "VLAN ID"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            vid = data.get("vid")
-            return vid if vid is not None else "Not assigned"
-        return None
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, client_data):
-        super().__init__(coordinator, client_data)
-        self._attr_unique_id = f"{self._client_mac}_ap"
-        self._attr_name = "Connected AP"
-        self._attr_icon = "mdi:access-point"
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        data = self._client_data
-        if data:
-            return data.get("ap")
-        return None
+    def native_value(self) -> StateType | datetime:
+        return self.entity_description.value_fn(self.ap)

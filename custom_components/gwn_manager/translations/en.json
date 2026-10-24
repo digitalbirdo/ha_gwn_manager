@@ -2,10 +2,25 @@
   "config": {
     "step": {
       "user": {
+        "title": "Connect to GWN Manager",
+        "description": "Create an App ID and secret in GWN Manager / GWN.Cloud under System → API Developer Mode.",
         "data": {
           "server_url": "Server URL",
           "app_id": "App ID",
-          "app_secret": "App Secret"
+          "app_secret": "App secret",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "server_url": "Your GWN Manager, e.g. https://192.168.1.10:8443, or the GWN.Cloud region, e.g. https://eu.gwn.cloud",
+          "app_id": "App ID from API Developer Mode",
+          "verify_ssl": "Disable for a GWN Manager with a self-signed certificate"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate GWN Manager",
+        "description": "The secret for App ID {app_id} was rejected. Please enter the current secret.",
+        "data": {
+          "app_secret": "App secret"
         }
       }
     },
@@ -15,7 +30,78 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "This GWN Manager and App ID are already configured",
+      "reauth_successful": "Re-authentication was successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Update interval",
+          "track_offline_clients": "Track offline clients"
+        },
+        "data_description": {
+          "track_offline_clients": "Create entities for all clients known to GWN Manager, not only for currently connected ones"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      }
+    },
+    "sensor": {
+      "rssi": {
+        "name": "Signal strength"
+      },
+      "access_point": {
+        "name": "Access point"
+      },
+      "ssid": {
+        "name": "SSID"
+      },
+      "band": {
+        "name": "Band"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "connected_since": {
+        "name": "Connected since"
+      },
+      "channel": {
+        "name": "Channel"
+      },
+      "tx_rate": {
+        "name": "TX link rate"
+      },
+      "rx_rate": {
+        "name": "RX link rate"
+      },
+      "tx_bytes": {
+        "name": "TX traffic"
+      },
+      "rx_bytes": {
+        "name": "RX traffic"
+      },
+      "ip_address": {
+        "name": "IP address"
+      },
+      "vlan": {
+        "name": "VLAN"
+      },
+      "clients": {
+        "name": "Connected clients"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "firmware": {
+        "name": "Firmware"
+      }
     }
   }
 }

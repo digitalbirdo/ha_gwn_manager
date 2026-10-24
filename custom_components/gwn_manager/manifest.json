@@ -1,12 +1,13 @@
 {
   "domain": "gwn_manager",
-  "name": "Grandstream GWN Manager",
-  "codeowners": [],
+  "name": "GWN Manager",
+  "codeowners": ["@digitalbirdo"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/digitalbirdo/ha_gwn_manager",
-  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
   "issue_tracker": "https://github.com/digitalbirdo/ha_gwn_manager/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

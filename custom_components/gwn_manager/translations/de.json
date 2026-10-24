@@ -1,0 +1,107 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit GWN Manager verbinden",
+        "description": "App ID und Secret legst du im GWN Manager / GWN.Cloud unter System → API Developer Mode an.",
+        "data": {
+          "server_url": "Server-URL",
+          "app_id": "App ID",
+          "app_secret": "App Secret",
+          "verify_ssl": "SSL-Zertifikat prüfen"
+        },
+        "data_description": {
+          "server_url": "Dein GWN Manager, z. B. https://192.168.1.10:8443, oder die GWN.Cloud-Region, z. B. https://eu.gwn.cloud",
+          "app_id": "App ID aus dem API Developer Mode",
+          "verify_ssl": "Deaktivieren bei einem GWN Manager mit selbstsigniertem Zertifikat"
+        }
+      },
+      "reauth_confirm": {
+        "title": "GWN Manager neu authentifizieren",
+        "description": "Das Secret für App ID {app_id} wurde abgelehnt. Bitte gib das aktuelle Secret ein.",
+        "data": {
+          "app_secret": "App Secret"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "invalid_auth": "Ungültige Zugangsdaten",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Dieser GWN Manager mit dieser App ID ist bereits eingerichtet",
+      "reauth_successful": "Neu-Authentifizierung erfolgreich"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Aktualisierungsintervall",
+          "track_offline_clients": "Offline-Clients einbeziehen"
+        },
+        "data_description": {
+          "track_offline_clients": "Entitäten für alle dem GWN Manager bekannten Clients anlegen, nicht nur für aktuell verbundene"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      }
+    },
+    "sensor": {
+      "rssi": {
+        "name": "Signalstärke"
+      },
+      "access_point": {
+        "name": "Access Point"
+      },
+      "ssid": {
+        "name": "SSID"
+      },
+      "band": {
+        "name": "Frequenzband"
+      },
+      "last_seen": {
+        "name": "Zuletzt gesehen"
+      },
+      "connected_since": {
+        "name": "Verbunden seit"
+      },
+      "channel": {
+        "name": "Kanal"
+      },
+      "tx_rate": {
+        "name": "TX-Linkrate"
+      },
+      "rx_rate": {
+        "name": "RX-Linkrate"
+      },
+      "tx_bytes": {
+        "name": "TX-Datenvolumen"
+      },
+      "rx_bytes": {
+        "name": "RX-Datenvolumen"
+      },
+      "ip_address": {
+        "name": "IP-Adresse"
+      },
+      "vlan": {
+        "name": "VLAN"
+      },
+      "clients": {
+        "name": "Verbundene Clients"
+      },
+      "uptime": {
+        "name": "Betriebszeit"
+      },
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  }
+}
