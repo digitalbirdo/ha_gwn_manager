@@ -23,6 +23,8 @@ for every device connected to your GWN access points.
 
 ### HACS (custom repository)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=digitalbirdo&repository=ha_gwn_manager&category=integration)
+
 1. HACS → ⋮ → *Custom repositories* → add `https://github.com/digitalbirdo/ha_gwn_manager`, type *Integration*
 2. Install **GWN Manager** and restart Home Assistant
 
@@ -54,3 +56,8 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
   rejected with `Authentication Failure`.
 
 API documentation: https://doc.grandstream.dev/GWN-API/EN/
+
+## Releasing
+
+Create a GitHub release with a tag like `v0.2.0`. The release workflow writes the version
+into `manifest.json` and attaches `gwn_manager.zip`, which HACS installs.

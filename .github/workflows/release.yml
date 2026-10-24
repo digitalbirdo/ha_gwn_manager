@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Attach zip to release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version in manifest
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          jq --arg v "$version" '.version = $v' custom_components/gwn_manager/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/gwn_manager/manifest.json
+
+      - name: Build zip
+        run: cd custom_components/gwn_manager && zip -r "$GITHUB_WORKSPACE/gwn_manager.zip" . -x '__pycache__/*'
+
+      - name: Upload zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" gwn_manager.zip --clobber
