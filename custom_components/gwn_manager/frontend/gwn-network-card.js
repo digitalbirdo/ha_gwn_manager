@@ -19,7 +19,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.5";
+const VERSION = "0.5.6";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -255,8 +255,16 @@ class GwnNetworkCard extends HTMLElement {
     this._floors = useFloors ? sorted : [];
     this._floorLayout = useFloors;
     const index = new Map(this._floors.map((f, i) => [f.id, i]));
+    // A device without a floor of its own (e.g. a switch without an area) takes
+    // the floor of the device it is plugged into; its LAN clients follow it.
+    const floorOf = (node, depth = 0) => {
+      const own = index.get(node.data.floor_id);
+      if (own !== undefined || depth > 5) return own;
+      const parent = node.data.uplink?.parent && this._nodes.get(`ap:${node.data.uplink.parent}`);
+      return parent ? floorOf(parent, depth + 1) : undefined;
+    };
     for (const node of this._nodes.values()) {
-      if (node.type === "ap") node.floor = index.get(node.data.floor_id);
+      if (node.type === "ap") node.floor = floorOf(node);
     }
     if (changed) {
       this._alpha = 1;
