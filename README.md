@@ -49,7 +49,12 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 
 ### Options
 
-- **Update interval** (default 30 s)
+- **Presence update interval** (default 10 s, min 5 s): how often the list of connected clients is
+  fetched. Connects and disconnects show up in GWN Manager right away.
+- **Consider away after** (default 180 s): a client is only reported away after being disconnected
+  this long, so phones briefly dropping Wi-Fi in standby don't flap. Arrivals are reported immediately.
+- **Update interval for all other data** (default 90 s): offline clients, devices and device details.
+  GWN Manager itself refreshes signal strength and other measurements only about every 90 s.
 - **Track offline clients**: create entities for all clients known to GWN Manager, not only for currently connected ones
 
 ## API notes

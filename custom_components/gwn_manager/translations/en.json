@@ -38,10 +38,15 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Update interval",
+          "presence_interval": "Presence update interval",
+          "away_delay": "Consider away after",
+          "scan_interval": "Update interval for all other data",
           "track_offline_clients": "Track offline clients"
         },
         "data_description": {
+          "presence_interval": "How often to check which clients are connected. Connects and disconnects show up in GWN Manager right away.",
+          "away_delay": "A client is only reported away after being disconnected this long, so phones briefly dropping Wi-Fi don't flap. 0 = immediately.",
+          "scan_interval": "Offline clients, devices and device details. GWN Manager refreshes signal strength and other measurements only every ~90 s.",
           "track_offline_clients": "Create entities for all clients known to GWN Manager, not only for currently connected ones"
         }
       }

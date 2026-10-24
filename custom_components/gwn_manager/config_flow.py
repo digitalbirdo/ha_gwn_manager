@@ -25,18 +25,34 @@ from .api import GWNAuthError, GWNClient, GWNError
 from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
+    CONF_AWAY_DELAY,
+    CONF_PRESENCE_INTERVAL,
     CONF_SERVER_URL,
     CONF_TRACK_OFFLINE,
+    DEFAULT_AWAY_DELAY,
+    DEFAULT_PRESENCE_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SERVER_URL,
     DEFAULT_TRACK_OFFLINE,
     DOMAIN,
+    MIN_PRESENCE_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+
+
+def _seconds(minimum: int, maximum: int) -> vol.All:
+    return vol.All(
+        NumberSelector(
+            NumberSelectorConfig(
+                min=minimum, max=maximum, unit_of_measurement="s", mode=NumberSelectorMode.BOX
+            )
+        ),
+        vol.Coerce(int),
+    )
 
 
 async def _validate(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, str]:
@@ -141,19 +157,20 @@ class GWNOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(
+                        CONF_PRESENCE_INTERVAL,
+                        default=options.get(CONF_PRESENCE_INTERVAL, DEFAULT_PRESENCE_INTERVAL),
+                    ): _seconds(MIN_PRESENCE_INTERVAL, 600),
+                    vol.Required(
+                        CONF_AWAY_DELAY,
+                        default=options.get(CONF_AWAY_DELAY, DEFAULT_AWAY_DELAY),
+                    ): _seconds(0, 3600),
+                    vol.Required(
                         CONF_SCAN_INTERVAL,
-                        default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-                    ): vol.All(
-                        NumberSelector(
-                            NumberSelectorConfig(
-                                min=MIN_SCAN_INTERVAL,
-                                max=3600,
-                                unit_of_measurement="s",
-                                mode=NumberSelectorMode.BOX,
-                            )
+                        default=max(
+                            options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                            MIN_SCAN_INTERVAL,
                         ),
-                        vol.Coerce(int),
-                    ),
+                    ): _seconds(MIN_SCAN_INTERVAL, 3600),
                     vol.Required(
                         CONF_TRACK_OFFLINE,
                         default=options.get(CONF_TRACK_OFFLINE, DEFAULT_TRACK_OFFLINE),

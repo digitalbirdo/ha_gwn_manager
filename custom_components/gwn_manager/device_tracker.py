@@ -1,12 +1,16 @@
 """Device tracker (presence) for GWN Manager clients."""
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.device_tracker import ScannerEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
+
+from .const import CONF_AWAY_DELAY, DEFAULT_AWAY_DELAY
 
 from .coordinator import GWNConfigEntry, GWNCoordinator
 from .entity import async_client_area, async_setup_client_entities, client_name
@@ -39,6 +43,9 @@ class GWNClientTracker(CoordinatorEntity[GWNCoordinator], ScannerEntity):
         self._mac = mac
         self._attr_mac_address = mac
         self._attr_name = client_name(mac, self.client)
+        self._away_delay = timedelta(
+            seconds=coordinator.config_entry.options.get(CONF_AWAY_DELAY, DEFAULT_AWAY_DELAY)
+        )
 
     @property
     def client(self) -> dict[str, Any]:
@@ -53,7 +60,12 @@ class GWNClientTracker(CoordinatorEntity[GWNCoordinator], ScannerEntity):
 
     @property
     def is_connected(self) -> bool:
-        return bool(self.client.get("connected"))
+        client = self.client
+        if client.get("connected"):
+            return True
+        # Only report away once the client has been gone for the away delay.
+        last_connected = client.get("lastConnected")
+        return last_connected is not None and dt_util.utcnow() - last_connected < self._away_delay
 
     @property
     def ip_address(self) -> str | None:

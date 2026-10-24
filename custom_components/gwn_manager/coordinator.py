@@ -19,7 +19,9 @@ from .api import GWNAuthError, GWNClient, GWNError
 from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
+    CONF_PRESENCE_INTERVAL,
     CONF_SERVER_URL,
+    DEFAULT_PRESENCE_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -40,6 +42,8 @@ class GWNData:
     # Keyed by upper-case MAC address.
     aps: dict[str, dict[str, Any]] = field(default_factory=dict)
     clients: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Network ID -> time zone name; filled by the full update.
+    networks: dict[int, str | None] = field(default_factory=dict)
 
 
 def parse_timestamp(value: Any, time_zone: str | None = None) -> datetime | None:
@@ -61,7 +65,11 @@ def parse_timestamp(value: Any, time_zone: str | None = None) -> datetime | None
 
 
 class GWNCoordinator(DataUpdateCoordinator[GWNData]):
-    """Polls APs and clients of all networks."""
+    """Polls APs and clients of all networks.
+
+    Runs at the presence interval and only fetches the connected clients then;
+    everything else is refreshed when the (longer) scan interval has passed.
+    """
 
     config_entry: GWNConfigEntry
 
@@ -72,9 +80,15 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(
-                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+                seconds=entry.options.get(CONF_PRESENCE_INTERVAL, DEFAULT_PRESENCE_INTERVAL)
             ),
         )
+        self._full_interval = timedelta(
+            seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
+        self._full: GWNData | None = None
+        self._full_fetched = datetime.min.replace(tzinfo=dt_util.UTC)
+        self._last_connected: dict[str, datetime] = {}
         self.client = GWNClient(
             async_get_clientsession(hass, verify_ssl=entry.data.get(CONF_VERIFY_SSL, True)),
             entry.data[CONF_SERVER_URL],
@@ -93,6 +107,37 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             raise UpdateFailed(str(err)) from err
 
     async def _fetch(self) -> GWNData:
+        now = dt_util.utcnow()
+        if self._full is None or now - self._full_fetched >= self._full_interval:
+            self._full = await self._fetch_full()
+            self._full_fetched = now
+
+        data = GWNData(aps=self._full.aps, networks=self._full.networks)
+        for mac, client in self._full.clients.items():
+            data.clients[mac] = {**client, "connected": False}
+
+        for network_id, time_zone in self._full.networks.items():
+            for client in await self.client.get_clients(network_id, connected_only=True):
+                if not (mac := (client.get("clientId") or "").upper()):
+                    continue
+                merged = data.clients.setdefault(mac, {"timeZone": time_zone})
+                merged.update(
+                    {
+                        k: v
+                        for k, v in client.items()
+                        if v not in (None, "") and k not in HISTORIC_KEYS
+                    }
+                )
+                merged["connected"] = True
+                self._last_connected[mac] = now
+
+        for mac, client in data.clients.items():
+            client["lastConnected"] = self._last_connected.get(mac)
+        return data
+
+    async def _fetch_full(self) -> GWNData:
+        """Fetch everything except the live client values."""
+        _LOGGER.debug("Full update")
         data = GWNData()
         for network in await self.client.get_networks():
             network_id = network["id"]
@@ -105,6 +150,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                     time_zone = None
                 self._time_zones[network_id] = time_zone
             time_zone = self._time_zones[network_id]
+            data.networks[network_id] = time_zone
 
             network_aps: dict[str, dict[str, Any]] = {}
             for ap in await self.client.get_access_points(network_id):
@@ -124,21 +170,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                 ap["details"] = detail
             data.aps.update(network_aps)
 
-            # All known clients (incl. offline) ...
+            # All known clients, including offline ones, without live values.
             for client in await self.client.get_clients(network_id, connected_only=False):
                 if mac := (client.get("clientId") or "").upper():
-                    data.clients[mac] = {**client, "connected": False, "timeZone": time_zone}
-            # ... overlaid with the live values of the connected ones.
-            for client in await self.client.get_clients(network_id, connected_only=True):
-                if mac := (client.get("clientId") or "").upper():
-                    merged = data.clients.get(mac, {"timeZone": time_zone})
-                    merged.update(
-                        {
-                            k: v
-                            for k, v in client.items()
-                            if v not in (None, "") and k not in HISTORIC_KEYS
-                        }
-                    )
-                    merged["connected"] = True
-                    data.clients[mac] = merged
+                    data.clients[mac] = {**client, "timeZone": time_zone}
         return data
