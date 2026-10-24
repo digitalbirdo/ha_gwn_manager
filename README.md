@@ -50,6 +50,7 @@ show_offline: false      # also show disconnected clients
 show_labels: true        # show client names (false: only on hover)
 animate: true            # gentle floating of the bubbles
 color_by: rssi           # rssi or band (2.4 / 5 / 6 GHz); can also be switched on the card
+show_rssi: true          # signal strength on the client links; toggle with the dBm button
 appearance: auto         # auto (follows the Home Assistant dark mode), dark or light
 layout: auto             # floors, free or auto (floors as soon as an AP's area has a floor)
 ```

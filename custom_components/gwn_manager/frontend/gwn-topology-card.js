@@ -17,7 +17,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.3";
+const TOPOLOGY_VERSION = "0.5.4";
 const RESUBSCRIBE_MS = 90_000;
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 

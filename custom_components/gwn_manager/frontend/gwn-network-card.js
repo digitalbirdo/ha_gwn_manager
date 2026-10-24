@@ -12,13 +12,14 @@
  *   show_labels: true        # show client names (false: only on hover)
  *   animate: true            # gentle floating of the bubbles
  *   color_by: rssi           # rssi or band; can also be switched on the card
+ *   show_rssi: true          # signal strength (dBm) on the client links; toggle with "dBm"
  *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   layout: auto             # floors (APs arranged by the floor of their area), free, or auto
  *                            # (floors as soon as an AP's area is assigned to a floor)
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.3";
+const VERSION = "0.5.4";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -92,6 +93,7 @@ class GwnNetworkCard extends HTMLElement {
       height: 450,
       show_offline: false,
       show_labels: true,
+      show_rssi: true,
       animate: true,
       color_by: "rssi",
       appearance: "auto",
@@ -99,6 +101,7 @@ class GwnNetworkCard extends HTMLElement {
       ...config,
     };
     this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
+    this._showRssi = this._config.show_rssi !== false;
     // Labels need more room between the bubbles.
     this._spread = this._config.show_labels ? 2.2 : 1;
     this._render();
@@ -476,6 +479,12 @@ class GwnNetworkCard extends HTMLElement {
           border: 0; background: transparent; color: var(--gwn-muted); border-radius: 999px;
           font-size: 11px; padding: 4px 12px; cursor: pointer; transition: background .2s, color .2s;
         }
+        .modes .sep { width: 1px; align-self: stretch; margin: 3px 2px; background: var(--gwn-chip-border); }
+        .rssi {
+          font: 600 9px var(--paper-font-body1_-_font-family, sans-serif);
+          paint-order: stroke; stroke: var(--gwn-halo); stroke-width: 3px; stroke-linejoin: round;
+          pointer-events: none;
+        }
         .modes button.active { background: var(--primary-color); color: var(--text-primary-color, #fff); }
         .error { padding: 16px; color: var(--error-color, #db4437); }
       </style>
@@ -508,6 +517,7 @@ class GwnNetworkCard extends HTMLElement {
             <g class="viewport">
               <g class="floors"></g>
               <g class="links"></g>
+              <g class="rssi-labels"></g>
               <g class="nodes"></g>
             </g>
           </svg>
@@ -516,6 +526,8 @@ class GwnNetworkCard extends HTMLElement {
           <div class="chip modes">
             <button data-mode="rssi">Signal</button>
             <button data-mode="band">Band</button>
+            <span class="sep"></span>
+            <button data-toggle="rssi">dBm</button>
           </div>
         </div>
         <div class="error" hidden></div>
@@ -524,13 +536,22 @@ class GwnNetworkCard extends HTMLElement {
     this._svg = this.shadowRoot.querySelector("svg");
     this._viewport = this.shadowRoot.querySelector(".viewport");
     this._linkLayer = this.shadowRoot.querySelector(".links");
+    this._rssiLayer = this.shadowRoot.querySelector(".rssi-labels");
+    this._rssiElements = [];
     this._floorLayer = this.shadowRoot.querySelector(".floors");
     this._floorElements = [];
     this._nodeLayer = this.shadowRoot.querySelector(".nodes");
     this._tooltip = this.shadowRoot.querySelector(".tooltip");
     this._elements = new Map();
     this._linkElements = [];
-    for (const button of this.shadowRoot.querySelectorAll(".modes button")) {
+    const rssiButton = this.shadowRoot.querySelector('[data-toggle="rssi"]');
+    rssiButton.classList.toggle("active", this._showRssi);
+    rssiButton.addEventListener("click", () => {
+      this._showRssi = !this._showRssi;
+      rssiButton.classList.toggle("active", this._showRssi);
+      this._syncElements();
+    });
+    for (const button of this.shadowRoot.querySelectorAll(".modes button[data-mode]")) {
       button.addEventListener("click", () => {
         this._colorBy = button.dataset.mode;
         this._renderLegend();
@@ -557,7 +578,7 @@ class GwnNetworkCard extends HTMLElement {
     legend.innerHTML = items
       .map(([color, label]) => `<span style="--c: ${color}">${escapeHtml(label)}</span>`)
       .join("");
-    for (const button of this.shadowRoot.querySelectorAll(".modes button")) {
+    for (const button of this.shadowRoot.querySelectorAll(".modes button[data-mode]")) {
       button.classList.toggle("active", button.dataset.mode === this._colorBy);
     }
   }
@@ -657,6 +678,26 @@ class GwnNetworkCard extends HTMLElement {
       line.setAttribute("stroke-width", isClient ? 1.5 : 3);
       line.setAttribute("stroke-opacity", isClient ? 0.7 : 1);
     });
+
+    // Signal strength on the client links
+    const labelled = this._showRssi
+      ? this._links.filter((l) => l.target.type === "client" && l.target.data.rssi != null)
+      : [];
+    while (this._rssiElements.length > labelled.length) this._rssiElements.pop().el.remove();
+    while (this._rssiElements.length < labelled.length) {
+      const el = document.createElementNS(SVG_NS, "text");
+      el.setAttribute("class", "rssi");
+      el.setAttribute("text-anchor", "middle");
+      el.setAttribute("dy", "3");
+      this._rssiLayer.appendChild(el);
+      this._rssiElements.push({ el, link: null });
+    }
+    labelled.forEach((link, i) => {
+      const item = this._rssiElements[i];
+      item.link = link;
+      item.el.textContent = `${link.target.data.rssi}`;
+      item.el.setAttribute("fill", this._clientColor(link.target.data));
+    });
   }
 
   _syncFloors() {
@@ -712,6 +753,12 @@ class GwnNetworkCard extends HTMLElement {
       line.setAttribute("x2", link.target.x.toFixed(1));
       line.setAttribute("y2", link.target.y.toFixed(1));
     });
+    for (const { el, link } of this._rssiElements) {
+      if (!link) continue;
+      // A bit closer to the client than the middle, so labels of one AP don't pile up.
+      el.setAttribute("x", (link.source.x * 0.4 + link.target.x * 0.6).toFixed(1));
+      el.setAttribute("y", (link.source.y * 0.4 + link.target.y * 0.6).toFixed(1));
+    }
     if (this._autoFit) this._fit();
     const { x, y, k } = this._view;
     this._viewport.setAttribute("transform", `translate(${x},${y}) scale(${k})`);
