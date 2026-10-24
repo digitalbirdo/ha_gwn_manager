@@ -96,6 +96,11 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - Endpoints without parameters must be called without a request body; a signed `{}` is
   rejected with `Authentication Failure`.
 
+## Development
+
+See [AGENTS.md](AGENTS.md) for the architecture, GWN API notes, conventions and how to run a
+local Home Assistant test instance (`scripts/`).
+
 ## Releasing
 
 1. Bump `version` in `custom_components/gwn_manager/manifest.json`
