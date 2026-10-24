@@ -267,7 +267,7 @@ class GwnTopologyCard extends HTMLElement {
       const info = kind === "gateway"
         ? `<div class="wan">
              ${device.wan ? `<div class="rates"><b class="dia">◈</b><span>↓ ${esc(formatRate(device.wan.downloadRate))}</span><span>↑ ${esc(formatRate(device.wan.uploadRate))}</span></div>` : ""}
-             ${total ? `<div class="muted small"><b class="dia">◈</b>${total} ${esc(this._t("clients"))} · ${bandText(device.bands)}</div>` : ""}
+             ${total ? `<div class="muted small gw-clients"><b class="dia">◈</b>${total} ${esc(this._t("clients"))} · ${bandText(device.bands)}</div>` : ""}
            </div>`
         : `<div class="brand"><span>G</span><small>NETWORK</small></div>`;
       const headRight = kind === "gateway" && device.wan
@@ -476,6 +476,7 @@ const STYLE = `
   .brand small { display: block; font-size: 7px; letter-spacing: 1.2px; font-weight: 700; margin-top: 3px; }
   .wan { min-width: 150px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
   .rates { display: flex; gap: 12px; align-items: center; font-weight: 600; }
+  .gw-clients { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
   .ports { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; }
   .port { flex: 1 1 90px; min-width: 70px; text-align: center; }
   .bar {
