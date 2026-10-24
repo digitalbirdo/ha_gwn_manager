@@ -57,5 +57,9 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 
 ## Releasing
 
-Create a GitHub release with a tag like `v0.2.0`. The release workflow writes the version
-into `manifest.json` and attaches `gwn_manager.zip`, which HACS installs.
+1. Bump `version` in `custom_components/gwn_manager/manifest.json`
+2. Create a GitHub release with the matching tag, e.g. `v0.2.1`
+
+HACS installs the integration directly from the tagged sources. (Zip release assets are not
+used: GitHub's release download redirect currently sends a header larger than aiohttp
+accepts, so HACS cannot download them.)
