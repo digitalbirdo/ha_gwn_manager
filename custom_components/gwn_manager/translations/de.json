@@ -43,7 +43,13 @@
           "scan_interval": "Intervall für alle übrigen Daten",
           "track_offline_clients": "Offline-Clients einbeziehen",
           "ssid_filter": "Nur Clients dieser SSIDs verfolgen",
-          "manual_uplinks": "Manuelle Zuordnungen"
+          "manual_uplinks": "Manuelle Zuordnungen",
+          "fast_syslog": "Schnelle Aktualisierung per Syslog",
+          "syslog_port": "Syslog-Port (UDP)",
+          "syslog_debug_events": "Debug-Ereignisse auswerten",
+          "fast_snmp": "Schnelle Aktualisierung per SNMP",
+          "snmp_community": "SNMP-Community",
+          "snmp_interval": "SNMP-Intervall"
         },
         "data_description": {
           "presence_interval": "Wie oft geprüft wird, welche Clients verbunden sind. Verbinden und Trennen erscheinen im GWN Manager sofort.",
@@ -51,7 +57,13 @@
           "scan_interval": "Offline-Clients, Geräte und Gerätedetails. Der GWN Manager aktualisiert Signalstärke und andere Messwerte nur etwa alle 90 s.",
           "track_offline_clients": "Entitäten für alle dem GWN Manager bekannten Clients anlegen, nicht nur für aktuell verbundene",
           "ssid_filter": "Leer lassen, um Clients aller SSIDs zu verfolgen. Bereits angelegte Entitäten bleiben erhalten.",
-          "manual_uplinks": "Eine Zeile pro Client: Client = Gerät oder Client = Gerät:Port, mit Namen oder MACs, z. B. \"zigbee-hub = Office AP:LAN\". Für Geräte am LAN-Port eines APs, die der GWN Manager dem Router zuordnet."
+          "manual_uplinks": "Eine Zeile pro Client: Client = Gerät oder Client = Gerät:Port, mit Namen oder MACs, z. B. \"zigbee-hub = Office AP:LAN\". Für Geräte am LAN-Port eines APs, die der GWN Manager dem Router zuordnet.",
+          "fast_syslog": "Syslog-Meldungen der Access Points empfangen: Verbinden, Trennen und Roaming erscheinen innerhalb einer Sekunde. Im GWN Manager als Syslog-Server diesen Home-Assistant-Host, den Port unten und die Stufe Notice eintragen.",
+          "syslog_port": "Port, auf dem Home Assistant empfängt. Im GWN Manager denselben Port eintragen.",
+          "syslog_debug_events": "Auch die ausführlichen Ereignisse (Signal, Rate, Kanal beim Verbinden) auswerten, die die Geräte nur bei Syslog-Stufe Debug senden – etwa viermal so viele Meldungen.",
+          "fast_snmp": "Signal und Rate der WLAN-Clients direkt von den Geräten lesen (SNMP v2c, im GWN Manager einschalten). Die Geräte werden automatisch erkannt.",
+          "snmp_community": "Lese-Community aus dem GWN Manager.",
+          "snmp_interval": "Pause zwischen zwei SNMP-Runden; eine Runde über alle Geräte dauert etwa 10–15 s."
         }
       }
     }

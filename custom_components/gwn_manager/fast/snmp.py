@@ -9,7 +9,17 @@ with several OIDs returns garbage.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+
+from pysnmp.hlapi.v3arch.asyncio import (
+    CommunityData,
+    ContextData,
+    ObjectIdentity,
+    ObjectType,
+    SnmpEngine,
+    UdpTransportTarget,
+    next_cmd,
+)
+from pysnmp.smi import view
 
 from .snmp_parse import COLUMNS, TABLES, MibVariant, SnmpClient, build_clients
 
@@ -31,11 +41,17 @@ class SnmpUnavailable(Exception):
 class SnmpPoller:
     """Reads one device's Wi-Fi clients."""
 
-    def __init__(self, host: str, community: str, walk: WalkFn | None = None) -> None:
+    def __init__(
+        self,
+        host: str,
+        community: str,
+        walk: WalkFn | None = None,
+        engine: SnmpEngine | None = None,
+    ) -> None:
         self.host = host
         self.community = community
         self.variant: MibVariant | None = None
-        self._walk = walk or _PysnmpWalker().walk
+        self._walk = walk or _PysnmpWalker(engine or build_engine()).walk
 
     async def detect(self) -> MibVariant | None:
         """Find out which client table the device has (None: no usable SNMP)."""
@@ -62,27 +78,25 @@ class SnmpPoller:
         return build_clients(self.variant, columns)
 
 
-class _PysnmpWalker:
-    """GETNEXT walk with pysnmp; one engine per poller."""
+def build_engine() -> SnmpEngine:
+    """Create an SNMP engine with its MIBs loaded (blocking: run in an executor)."""
+    engine = SnmpEngine()
+    mib_view_controller = view.MibViewController(
+        engine.message_dispatcher.mib_instrum_controller.get_mib_builder()
+    )
+    engine.cache["mibViewController"] = mib_view_controller
+    mib_view_controller.mibBuilder.load_modules()
+    return engine
 
-    def __init__(self) -> None:
-        self._engine: Any = None
-        self._targets: dict[str, Any] = {}
+
+class _PysnmpWalker:
+    """GETNEXT walk with pysnmp."""
+
+    def __init__(self, engine: SnmpEngine) -> None:
+        self._engine = engine
+        self._targets: dict[str, UdpTransportTarget] = {}
 
     async def walk(self, host: str, community: str, oid: str) -> dict[str, str]:
-        # Imported here: pysnmp loads its MIB modules on import (blocking I/O).
-        from pysnmp.hlapi.v3arch.asyncio import (  # noqa: PLC0415
-            CommunityData,
-            ContextData,
-            ObjectIdentity,
-            ObjectType,
-            SnmpEngine,
-            UdpTransportTarget,
-            next_cmd,
-        )
-
-        if self._engine is None:
-            self._engine = SnmpEngine()
         if host not in self._targets:
             self._targets[host] = await UdpTransportTarget.create(
                 (host, 161), timeout=TIMEOUT, retries=0

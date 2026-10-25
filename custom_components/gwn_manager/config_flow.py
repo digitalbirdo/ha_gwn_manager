@@ -37,11 +37,22 @@ from .const import (
     DEFAULT_AWAY_DELAY,
     DEFAULT_PRESENCE_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
+    CONF_FAST_SNMP,
+    CONF_FAST_SYSLOG,
+    CONF_SNMP_COMMUNITY,
+    CONF_SNMP_INTERVAL,
+    CONF_SYSLOG_DEBUG_EVENTS,
+    CONF_SYSLOG_PORT,
     DEFAULT_SERVER_URL,
+    DEFAULT_SNMP_COMMUNITY,
+    DEFAULT_SNMP_INTERVAL,
+    DEFAULT_SYSLOG_PORT,
     DEFAULT_TRACK_OFFLINE,
     DOMAIN,
     MIN_PRESENCE_INTERVAL,
+    MAX_SNMP_INTERVAL,
     MIN_SCAN_INTERVAL,
+    MIN_SNMP_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,6 +215,33 @@ class GWNOptionsFlow(OptionsFlow):
                     vol.Optional(
                         CONF_MANUAL_UPLINKS, default=options.get(CONF_MANUAL_UPLINKS, "")
                     ): TextSelector(TextSelectorConfig(multiline=True)),
+                    vol.Required(
+                        CONF_FAST_SYSLOG, default=options.get(CONF_FAST_SYSLOG, False)
+                    ): bool,
+                    vol.Required(
+                        CONF_SYSLOG_PORT,
+                        default=options.get(CONF_SYSLOG_PORT, DEFAULT_SYSLOG_PORT),
+                    ): vol.All(
+                        NumberSelector(
+                            NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
+                        ),
+                        vol.Coerce(int),
+                    ),
+                    vol.Required(
+                        CONF_SYSLOG_DEBUG_EVENTS,
+                        default=options.get(CONF_SYSLOG_DEBUG_EVENTS, False),
+                    ): bool,
+                    vol.Required(
+                        CONF_FAST_SNMP, default=options.get(CONF_FAST_SNMP, False)
+                    ): bool,
+                    vol.Required(
+                        CONF_SNMP_COMMUNITY,
+                        default=options.get(CONF_SNMP_COMMUNITY, DEFAULT_SNMP_COMMUNITY),
+                    ): str,
+                    vol.Required(
+                        CONF_SNMP_INTERVAL,
+                        default=options.get(CONF_SNMP_INTERVAL, DEFAULT_SNMP_INTERVAL),
+                    ): _seconds(MIN_SNMP_INTERVAL, MAX_SNMP_INTERVAL),
                 }
             ),
         )

@@ -25,7 +25,7 @@ from ..const import (
     DEFAULT_SYSLOG_PORT,
     DOMAIN,
 )
-from .snmp import SnmpPoller, SnmpUnavailable
+from .snmp import SnmpPoller, SnmpUnavailable, build_engine
 from .state import FastState
 from .syslog import start_syslog
 from .syslog_parse import SyslogEvent
@@ -57,6 +57,7 @@ class FastSources:
         self._transport: asyncio.DatagramTransport | None = None
         self._task: asyncio.Task | None = None
         self._pending: CALLBACK_TYPE | None = None
+        self._engine: Any = None
         self._pollers: dict[str, SnmpPoller] = {}  # device MAC -> poller
         self._undetected: dict[str, Any] = {}  # device MAC -> time of the failed detection
         self.stats: Counter[str] = Counter()
@@ -97,6 +98,7 @@ class FastSources:
         else:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
         if self.snmp_enabled:
+            self._engine = await self.hass.async_add_executor_job(build_engine)
             self._task = self.entry.async_create_background_task(
                 self.hass, self._snmp_loop(), f"{DOMAIN} SNMP"
             )
@@ -178,14 +180,17 @@ class FastSources:
     async def _detect_devices(self) -> None:
         aps = self.coordinator.data.aps if self.coordinator.data else {}
         now = dt_util.utcnow()
+        candidates: dict[str, SnmpPoller] = {}
         for mac, ap in aps.items():
             ip = ap.get("ipv4") or ap.get("ip")
             if not ip or mac in self._pollers:
                 continue
             if (failed := self._undetected.get(mac)) and now - failed < REDETECT:
                 continue
-            poller = SnmpPoller(ip, self.community)
-            if await poller.detect():
+            candidates[mac] = SnmpPoller(ip, self.community, engine=self._engine)
+        results = await asyncio.gather(*(p.detect() for p in candidates.values()))
+        for (mac, poller), variant in zip(candidates.items(), results, strict=True):
+            if variant:
                 self._pollers[mac] = poller
                 self._undetected.pop(mac, None)
             else:

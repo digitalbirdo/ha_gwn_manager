@@ -43,7 +43,13 @@
           "scan_interval": "Update interval for all other data",
           "track_offline_clients": "Track offline clients",
           "ssid_filter": "Only track clients of these SSIDs",
-          "manual_uplinks": "Manual assignments"
+          "manual_uplinks": "Manual assignments",
+          "fast_syslog": "Fast updates via syslog",
+          "syslog_port": "Syslog port (UDP)",
+          "syslog_debug_events": "Use debug events",
+          "fast_snmp": "Fast updates via SNMP",
+          "snmp_community": "SNMP community",
+          "snmp_interval": "SNMP interval"
         },
         "data_description": {
           "presence_interval": "How often to check which clients are connected. Connects and disconnects show up in GWN Manager right away.",
@@ -51,7 +57,13 @@
           "scan_interval": "Offline clients, devices and device details. GWN Manager refreshes signal strength and other measurements only every ~90 s.",
           "track_offline_clients": "Create entities for all clients known to GWN Manager, not only for currently connected ones",
           "ssid_filter": "Leave empty to track clients of all SSIDs. Entities of clients that are already set up are kept.",
-          "manual_uplinks": "One line per client: client = device or client = device:port, using names or MACs, e.g. \"zigbee-hub = Office AP:LAN\". For devices behind an AP's LAN port, which GWN Manager attributes to the router."
+          "manual_uplinks": "One line per client: client = device or client = device:port, using names or MACs, e.g. \"zigbee-hub = Office AP:LAN\". For devices behind an AP's LAN port, which GWN Manager attributes to the router.",
+          "fast_syslog": "Receive the access points' syslog messages: connects, disconnects and roaming show up within a second. In GWN Manager set the syslog server to this Home Assistant host, the port below and level notice.",
+          "syslog_port": "Port Home Assistant listens on. Use the same port in GWN Manager.",
+          "syslog_debug_events": "Also evaluate the detailed events (signal, rate, channel at connect) the devices only send at syslog level debug – about four times as many messages.",
+          "fast_snmp": "Read signal and rate of the Wi-Fi clients directly from the devices (SNMP v2c, enable it in GWN Manager). Devices are detected automatically.",
+          "snmp_community": "Read community set in GWN Manager.",
+          "snmp_interval": "Pause between two SNMP rounds; one round of all devices takes about 10–15 s."
         }
       }
     }
