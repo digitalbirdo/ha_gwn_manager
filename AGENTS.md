@@ -236,7 +236,7 @@ coordinates and keys, but check with `grep` for your own values before committin
 - Unit tests for the HA parts with `pytest-homeassistant-custom-component` and a mocked API
   (the pure fast-source modules already have tests in `tests/`).
 - SNMPv3 for the fast sources (USM user, auth/priv), for networks that turned v2c off.
-- Client detail panel in both cards (in progress on `feature/fast-sources`): tapping a client
+- Client detail panel in both cards (started): tapping a client
   expands a panel instead of opening the device page; only the client's name links to the HA
   device page. Shows live: AP, BSSID, band/channel, RSSI/SNR, rate, Wi-Fi mode, IP; a signal chart
   of the last minutes from the fast sources; a roaming timeline (connected / roamed / band change /
@@ -245,12 +245,6 @@ coordinates and keys, but check with `grep` for your own values before committin
   `client_history.py` (bounded per-client samples + events, done with tests), WebSocket
   `gwn_manager/subscribe_client`; frontend: shared module `gwn-client-detail.js`, loaded lazily.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
-- Change indication in the topology card, only for meaningful events (not every RSSI/rate update,
-  those change for almost all clients every ~90 s): client connected (briefly highlighted),
-  disconnected (stays greyed out for a few seconds; the card re-renders fully, so it has to keep
-  removed clients), roamed (highlighted at the new AP, greyed at the old one), AP/port/internet
-  status changes, signal only when it crosses a colour step. Reuse the coordinator's connect/
-  disconnect/roam detection. Estimated about half a day.
 
 The maintainer may keep a local, git-ignored `LIVING_DOCUMENT.md` with private project notes;
 if it exists, read it first and keep it up to date.
