@@ -13,13 +13,14 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL, CONF_VERIFY_SSL
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .api import GWNAuthError, GWNClient, GWNError
+from .fast.state import FastState, apply_overlay
 from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
@@ -152,6 +153,11 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._rates: dict[str, tuple[float, float]] = {}
         # MAC -> AP MAC of connected clients after the previous update
         self._previous: dict[str, str | None] | None = None
+        # API snapshot of the last poll, before the fast sources are laid over it.
+        self._base: GWNData | None = None
+        # Syslog/SNMP state, set up in __init__.py when the options enable them.
+        self.fast: FastState | None = None
+        self.fast_max_age = timedelta(seconds=30)
         # Wired clients seen connected since setup (MAC -> last record); the API
         # only lists wired clients while they are connected.
         self._wired: dict[str, dict[str, Any]] = {}
@@ -208,6 +214,34 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                 self._last_connected[mac] = now
                 self._update_throughput(mac, client, now)
 
+        self._base = data
+        return self._compose(now)
+
+    def _compose(self, now: datetime) -> GWNData:
+        """API snapshot plus the fast sources, with the derived values."""
+        base = self._base
+        assert base is not None
+        data = GWNData(
+            aps=base.aps,
+            networks=base.networks,
+            ssids=base.ssids,
+            clients={mac: dict(client) for mac, client in base.clients.items()},
+        )
+        if self.fast is not None:
+            overlay = self.fast.overlay(now, self.fast_max_age)
+            for mac, entry in overlay.items():
+                client = base.clients.get(mac)
+                if (
+                    client
+                    and client.get("connected")
+                    and entry.get("bssid")
+                    and client.get("channelClassStr")
+                    and (client.get("apId") or "").upper() == entry.get("apId")
+                ):
+                    self.fast.learn_band(entry["bssid"], client["channelClassStr"])
+            for mac in apply_overlay(data.clients, data.aps, overlay):
+                self._last_connected[mac] = now
+
         for mac, client in data.clients.items():
             client["lastConnected"] = self._last_connected.get(mac)
             rates = self._rates.get(mac) if client["connected"] else None
@@ -217,6 +251,18 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._apply_manual_uplinks(data)
         self._detect_events(data)
         return data
+
+    @callback
+    def async_fast_update(self) -> None:
+        """Publish a change from the fast sources without an API request.
+
+        Not async_set_updated_data: that restarts the polling timer, and
+        frequent fast updates would then keep the API from being polled.
+        """
+        if self._base is None:
+            return
+        self.data = self._compose(dt_util.utcnow())
+        self.async_update_listeners()
 
     def _detect_device_uplinks(self, data: GWNData) -> None:
         """Guess which switch port each AP and the router are plugged into.
