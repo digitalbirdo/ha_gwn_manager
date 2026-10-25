@@ -174,6 +174,13 @@ class GWNOptionsFlow(OptionsFlow):
             )
         return sorted(names)
 
+    def _settings_url(self) -> str:
+        """GWN Manager page with the syslog and SNMP settings of the (first) network."""
+        base = self.config_entry.data[CONF_SERVER_URL].rstrip("/")
+        coordinator = getattr(self.config_entry, "runtime_data", None)
+        networks = sorted(coordinator.data.networks) if coordinator and coordinator.data else []
+        return f"{base}/network/{networks[0] if networks else 1}/settings/system"
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -183,6 +190,7 @@ class GWNOptionsFlow(OptionsFlow):
         options = self.config_entry.options
         return self.async_show_form(
             step_id="init",
+            description_placeholders={"settings_url": self._settings_url()},
             data_schema=vol.Schema(
                 {
                     vol.Required(

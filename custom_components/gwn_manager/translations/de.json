@@ -66,7 +66,8 @@
           "snmp_community": "Lese-Community aus dem GWN Manager.",
           "snmp_interval": "Pause zwischen zwei SNMP-Runden; eine Runde über alle Geräte dauert etwa 10–15 s.",
           "remove_after_days": "Clients, die länger nicht verbunden waren, werden samt Entitäten aus Home Assistant entfernt und kommen zurück, sobald sie sich wieder verbinden. 0 = nie. Nicht verbundene Clients lassen sich auch auf ihrer Geräteseite von Hand löschen."
-        }
+        },
+        "description": "Syslog und SNMP schaltest du im GWN Manager unter den Systemeinstellungen ein: {settings_url}"
       }
     }
   },

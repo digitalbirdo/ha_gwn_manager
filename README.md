@@ -159,7 +159,8 @@ that doesn't answer simply stays on the API.
   and enter its read community (default `public`). Access points (GWN76xx) and routers (GWN70xx) are
   detected automatically; access points report the signal-to-noise ratio, which is converted with a
   noise floor of −95 dBm.
-- The GWN API can't switch syslog or SNMP on – do it in GWN Manager. If the syslog port can't be
+- The GWN API can't switch syslog or SNMP on – do it in GWN Manager under *System settings*
+  (`<GWN Manager URL>/network/<id>/settings/system`; the options dialog links there directly). If the syslog port can't be
   opened, a repair issue says so and the integration keeps running without syslog.
 - Diagnostics (`fast_sources`) show per device whether SNMP was detected and how many syslog events arrived.
 

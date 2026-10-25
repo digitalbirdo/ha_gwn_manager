@@ -66,7 +66,8 @@
           "snmp_community": "Read community set in GWN Manager.",
           "snmp_interval": "Pause between two SNMP rounds; one round of all devices takes about 10–15 s.",
           "remove_after_days": "Clients not connected for longer than this are removed from Home Assistant with their entities, and come back when they connect again. 0 = never. Not connected clients can also be deleted by hand on their device page."
-        }
+        },
+        "description": "Syslog and SNMP are switched on in GWN Manager under System settings: {settings_url}"
       }
     }
   },
