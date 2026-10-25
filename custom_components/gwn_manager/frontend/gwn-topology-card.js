@@ -11,6 +11,8 @@
  *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   show_all_ports: false    # also show switch ports without link
  *   expanded: false          # show the details of all devices (also a button on the card)
+ *   graphs: true             # history graphs: internet, channel load, client signal
+ *   history_hours: 24        # time span of the graphs
  *   device_images: true      # product pictures of the devices (loaded from the GWN Manager)
  *   uplinks:                 # which port each device is plugged into (the API doesn't tell)
  *     Living Room AP: Switch:17   # "<device>:<port>", or just the port if there is one switch
@@ -24,6 +26,24 @@ const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
 const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
 const EXPAND_KEY = "gwn-topology-card:expanded";
+const HISTORY_REFRESH_MS = 5 * 60_000;
+
+// SVG path of [time, value] points; gaps (no number) break the line.
+function linePath(points, start, end, width, height, min, max) {
+  const x = (t) => ((t - start) / (end - start)) * width;
+  const y = (v) => height - 1 - ((Math.min(Math.max(v, min), max) - min) / (max - min || 1)) * (height - 2);
+  let d = "";
+  let pen = false;
+  for (const [t, v] of points) {
+    if (t < start || !Number.isFinite(v)) {
+      pen = false;
+      continue;
+    }
+    d += `${pen ? "L" : "M"}${x(t).toFixed(1)},${y(v).toFixed(1)}`;
+    pen = true;
+  }
+  return d;
+}
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
 const TEXT = {
@@ -78,6 +98,8 @@ class GwnTopologyCard extends HTMLElement {
     this._networks = null;
     this._lastMessage = 0;
     this._failedImages = new Set();
+    this._history = new Map(); // entity_id -> [[time ms, value], ...]
+    this._historyFetched = new Map(); // entity_id -> time ms
   }
 
   static getStubConfig() {
@@ -85,7 +107,7 @@ class GwnTopologyCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { appearance: "auto", show_all_ports: false, device_images: true, expanded: false, uplinks: {}, ...config };
+    this._config = { appearance: "auto", show_all_ports: false, device_images: true, expanded: false, graphs: true, history_hours: 24, uplinks: {}, ...config };
     // The button state is remembered per browser, the option is the default.
     let stored = null;
     try {
@@ -260,6 +282,59 @@ class GwnTopologyCard extends HTMLElement {
     const up = `<b class="up">↑</b>`;
     const ghz = (band) => (band || "").replace("G", " GHz");
     // Channel, width, transmit power and load of each radio of the selected device.
+    // History graphs, from the recorder of the integration's sensors.
+    const graphs = this._config.graphs !== false;
+    const end = Date.now();
+    const start = end - Number(this._config.history_hours || 24) * 3_600_000;
+    const series = (entityId) => {
+      const points = entityId && this._history.get(entityId);
+      if (!points) return null;
+      const live = parseFloat(this._hass?.states[entityId]?.state);
+      return Number.isFinite(live) ? [...points, [end, live]] : points;
+    };
+    const spark = (entityId, { min, max, color, unit = "" }) => {
+      const points = graphs ? series(entityId) : null;
+      const values = (points || []).filter(([t, v]) => t >= start && Number.isFinite(v)).map(([, v]) => v);
+      if (values.length < 2) return "";
+      const lo = Math.min(...values);
+      const hi = Math.max(...values);
+      return `<svg class="spark" viewBox="0 0 40 14" width="40" height="14" aria-hidden="true">
+          <title>${esc(`min ${lo}${unit} · max ${hi}${unit}`)}</title>
+          <path d="${linePath(points, start, end, 40, 14, min ?? lo, max ?? hi)}" style="stroke:${color}"/>
+        </svg>`;
+    };
+    const wanChart = (device) => {
+      const ids = graphs ? device.wan_entities : null;
+      const downPoints = ids && series(ids.download);
+      const upPoints = ids && series(ids.upload);
+      if (!downPoints && !upPoints) return "";
+      const values = [...(downPoints || []), ...(upPoints || [])]
+        .filter(([t, v]) => t >= start && Number.isFinite(v)).map(([, v]) => v);
+      if (values.length < 2) return "";
+      const max = Math.max(...values, 0.01);
+      const unit = this._hass?.states[ids.download]?.attributes.unit_of_measurement ?? "";
+      const W = 240;
+      const H = 44;
+      const downLine = linePath(downPoints || [], start, end, W, H, 0, max);
+      return `
+        <div class="wan-chart" data-mac="${esc(device.mac)}" data-start="${start}" data-end="${end}">
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+            ${downLine ? `<path class="area down" d="${downLine}L${W},${H}L0,${H}Z"/><path class="line down" d="${downLine}"/>` : ""}
+            <path class="line up" d="${linePath(upPoints || [], start, end, W, H, 0, max)}"/>
+            <line class="cursor" x1="0" x2="0" y1="0" y2="${H}"/>
+          </svg>
+          <div class="axis"><span>${esc(`max ${Number(max.toPrecision(3))} ${unit}`)}</span><span>${esc(`${this._config.history_hours || 24} h`)}</span></div>
+          <div class="chart-tip"></div>
+        </div>`;
+    };
+    this._wanSeries = new Map(
+      routers.filter((d) => d.wan_entities).map((d) => [d.mac, {
+        down: series(d.wan_entities.download) || [],
+        up: series(d.wan_entities.upload) || [],
+        unit: this._hass?.states[d.wan_entities.download]?.attributes.unit_of_measurement ?? "",
+      }])
+    );
+
     const radioTable = (device) => {
       const radios = device.radios || [];
       if (!radios.length) return "";
@@ -274,7 +349,8 @@ class GwnTopologyCard extends HTMLElement {
             <div class="radio-row">
               <span class="rband b${esc(r.band)}">${esc(ghz(r.band))}</span><span>${cell(r.channel, "")}</span>
               <span>${cell(r.width, " MHz")}</span><span>${cell(r.power, " dBm")}</span>
-              <span>${r.load == null ? "–" : `<b class="load" style="--load:${Number(r.load)}%"></b>${esc(r.load)} %`}</span>
+              <span class="rload">${r.load == null ? "–" : `${spark(r.load_entity, { min: 0, max: 100, color: "var(--accent)", unit: " %" })
+                || `<b class="load" style="--load:${Number(r.load)}%"></b>`}${esc(r.load)} %`}</span>
             </div>`).join("")}
           ${radios.some((r) => r.width != null) ? `<div class="hint">${esc(this._t("widthHint"))}</div>` : ""}
         </div>`;
@@ -292,7 +368,7 @@ class GwnTopologyCard extends HTMLElement {
       if (c.tx_rate != null && c.rx_rate != null) {
         parts.push(`<span class="part">${down}${esc(c.rx_rate)} ${up}${esc(c.tx_rate)}</span>`);
       }
-      return parts.join(" · ");
+      return parts.join("");
     };
     // Clients without a name are named by their MAC; the front is just the
     // vendor prefix, so show the distinguishing end ("…FD:55:17").
@@ -304,7 +380,8 @@ class GwnTopologyCard extends HTMLElement {
           <span class="cline"><span class="cname" title="${esc(c.name)}">${esc(shortName(c.name))}</span>${c.ip
             ? `<button class="ip" data-copy="${esc(c.ip)}" title="${esc(this._t("copy"))}">${esc(c.ip)}</button>` : ""}${c.rssi != null && !c.wired
             ? `<span class="rssi" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
-          <span class="cmeta">${clientMeta(c)}</span>
+          <span class="cline2"><span class="cmeta">${clientMeta(c)}</span>${c.rssi != null && !c.wired
+            ? spark(c.signal_entity, { min: -90, max: -30, color: rssiColor(c.rssi), unit: " dBm" }) : ""}</span>
         </span>
       </div>`;
     const groupHead = (name, count, bands = [], hidden = false) => `
@@ -313,8 +390,8 @@ class GwnTopologyCard extends HTMLElement {
         <span class="sbands">${bands.map((b) => `<b class="b${esc(b)}">${esc(b.replace("G", ""))}</b>`).join("")}</span>
         <span class="scount" title="${esc(this._t("clients"))}">${esc(count)}</span>
       </div>`;
-    // Clients grouped by SSID in the order the device lists its SSIDs (also
-    // the ones without clients), then other SSIDs, then wired clients.
+    // Clients grouped by SSID, sorted by name (also SSIDs without clients),
+    // guest networks after the others, wired clients last.
     const clientList = (device) => {
       if (!this._expandAll && this._selected !== device.mac) return "";
       const list = clients
@@ -332,6 +409,8 @@ class GwnTopologyCard extends HTMLElement {
         if (!group) groups.push((group = { name, bands: [], hidden: false, items: [] }));
         group.items.push(c);
       }
+      groups.sort((a, b) => Number(!!a.guest) - Number(!!b.guest)
+        || a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
       if (wired.length) groups.push({ name: this._t("wired"), bands: [], hidden: false, items: wired });
       const body = groups.length
         ? groups.map((g) => `
@@ -411,6 +490,7 @@ class GwnTopologyCard extends HTMLElement {
       const info = kind === "gateway"
         ? `<div class="wan">
              ${device.wan ? `<div class="rates"><b class="dia">◈</b><span>${down} ${esc(formatRate(device.wan.downloadRate))}</span><span>${up} ${esc(formatRate(device.wan.uploadRate))}</span></div>` : ""}
+             ${wanChart(device)}
              ${total ? `<div class="muted small gw-clients"><b class="dia">◈</b>${total} ${esc(this._t("clients"))} · ${bandText(device.bands)}</div>` : ""}
            </div>`
         : `<div class="brand"><span>G</span><small>NETWORK</small></div>`;
@@ -498,6 +578,12 @@ class GwnTopologyCard extends HTMLElement {
         moreInfo(el.dataset.info);
       });
     }
+    for (const chart of this.shadowRoot.querySelectorAll(".wan-chart")) {
+      chart.addEventListener("pointermove", (event) => this._showWanTip(chart, event));
+      chart.addEventListener("pointerleave", () => chart.classList.remove("hover"));
+      chart.addEventListener("click", (event) => event.stopPropagation());
+    }
+    this._loadHistory(devices, clients);
     for (const el of this.shadowRoot.querySelectorAll("[data-copy]")) {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -520,6 +606,76 @@ class GwnTopologyCard extends HTMLElement {
       this._limitClientLists();
       this._drawWires();
     });
+  }
+
+  // Fetch the history of the sensors the graphs need: the internet rates of
+  // the routers and, for expanded devices, channel load and client signal.
+  async _loadHistory(devices, clients) {
+    if (this._config.graphs === false || !this._hass || this._historyLoading) return;
+    const expanded = (mac) => this._expandAll || this._selected === mac;
+    const wanted = [];
+    for (const device of devices) {
+      if (device.wan_entities) wanted.push(device.wan_entities.download, device.wan_entities.upload);
+      if (!expanded(device.mac)) continue;
+      for (const radio of device.radios || []) wanted.push(radio.load_entity);
+      for (const client of clients) {
+        if (client.connected && !client.wired && client.ap === device.mac) wanted.push(client.signal_entity);
+      }
+    }
+    const now = Date.now();
+    const due = [...new Set(wanted.filter(Boolean))].filter(
+      (id) => now - (this._historyFetched.get(id) || 0) > HISTORY_REFRESH_MS
+    );
+    if (!due.length) return;
+    this._historyLoading = true;
+    try {
+      const hours = Number(this._config.history_hours || 24);
+      const result = await this._hass.callWS({
+        type: "history/history_during_period",
+        start_time: new Date(now - hours * 3_600_000).toISOString(),
+        end_time: new Date(now).toISOString(),
+        entity_ids: due,
+        minimal_response: true,
+        no_attributes: true,
+        significant_changes_only: false,
+      });
+      for (const id of due) {
+        this._history.set(id, (result[id] || []).map((s) => [(s.lu ?? s.lc ?? 0) * 1000, parseFloat(s.s)]));
+        this._historyFetched.set(id, now);
+      }
+    } catch (err) {
+      // No recorder or no permission: no graphs, try again later.
+      for (const id of due) this._historyFetched.set(id, now);
+    } finally {
+      this._historyLoading = false;
+    }
+    this._render();
+  }
+
+  // Crosshair and values of the internet graph under the pointer.
+  _showWanTip(chart, event) {
+    const data = this._wanSeries?.get(chart.dataset.mac);
+    if (!data) return;
+    const box = chart.querySelector("svg").getBoundingClientRect();
+    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
+    const time = Number(chart.dataset.start) + ratio * (Number(chart.dataset.end) - Number(chart.dataset.start));
+    // Value in effect at that time: the last state change before it.
+    const at = (points) => {
+      let value = null;
+      for (const [t, v] of points) {
+        if (t > time) break;
+        value = v;
+      }
+      return Number.isFinite(value) ? Number(value.toPrecision(3)) : "–";
+    };
+    const clock = new Date(time).toLocaleTimeString(this._hass?.language, { hour: "2-digit", minute: "2-digit" });
+    const tip = chart.querySelector(".chart-tip");
+    tip.innerHTML = `${esc(clock)} <b class="down">↓</b> ${esc(at(data.down))} <b class="up">↑</b> ${esc(at(data.up))} ${esc(data.unit)}`;
+    tip.style.left = `${Math.min(ratio * box.width, box.width - tip.offsetWidth)}px`;
+    const cursor = chart.querySelector(".cursor");
+    cursor.setAttribute("x1", ratio * 240);
+    cursor.setAttribute("x2", ratio * 240);
+    chart.classList.add("hover");
   }
 
   // Copy the button's value; navigator.clipboard only exists on HTTPS/localhost.
@@ -744,6 +900,24 @@ const STYLE = `
   .brand span { font-size: 26px; font-weight: 300; }
   .brand small { display: block; font-size: 7px; letter-spacing: 1.2px; font-weight: 700; margin-top: 3px; }
   .wan { min-width: 150px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .wan-chart { position: relative; width: 240px; max-width: 100%; cursor: crosshair; }
+  .wan-chart svg { display: block; width: 100%; height: 44px; overflow: visible; }
+  .wan-chart .line { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .wan-chart .line.down { stroke: var(--ok); }
+  .wan-chart .line.up { stroke: var(--bad); }
+  .wan-chart .area.down { fill: var(--ok); opacity: .12; stroke: none; }
+  .wan-chart .cursor { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0; }
+  .wan-chart.hover .cursor { opacity: .7; }
+  .wan-chart .axis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+  .wan-chart .chart-tip {
+    position: absolute; top: -22px; left: 0; display: none; white-space: nowrap; pointer-events: none;
+    font-size: 10.5px; padding: 2px 6px; border-radius: 6px; background: var(--card); border: 1px solid var(--card-border);
+  }
+  .wan-chart.hover .chart-tip { display: block; }
+  svg.spark { flex: none; overflow: visible; }
+  svg.spark path { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .rload { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .rload svg.spark { width: 26px; }
   .rates { display: flex; gap: 12px; align-items: center; font-weight: 600; }
   .gw-clients { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
   .ports { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; }
@@ -791,10 +965,14 @@ const STYLE = `
   .client-row .ip:hover { color: var(--accent); background: rgba(56, 198, 232, .1); }
   .client-row .ip.copied { color: var(--ok); }
   .client-row .rssi { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .client-row .cline2 { display: flex; gap: 6px; align-items: center; }
+  .client-row .cline2 svg.spark { width: 28px; }
+  .client-row .cline2 .cmeta { flex: 1; min-width: 0; }
   .client-row .cmeta {
-    color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .client-row .cmeta .part { white-space: nowrap; }
+  .client-row .cmeta .part + .part { margin-left: 6px; }
   b.down { color: var(--ok); }
   b.up { color: var(--bad); }
   .radios { margin: 2px 0 8px; padding: 6px 6px 8px; border-bottom: 1px solid var(--line); font-size: 11px; }

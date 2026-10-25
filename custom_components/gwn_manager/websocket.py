@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import voluptuous as vol
@@ -71,7 +72,9 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def _radios(ap: dict[str, Any], widths: dict[str, int]) -> list[dict[str, Any]]:
+def _radios(
+    ap: dict[str, Any], widths: dict[str, int], load_entity: Callable[[str], str | None]
+) -> list[dict[str, Any]]:
     """Channel, transmit power and channel load of each active radio.
 
     The API doesn't report the channel width of a radio, only the one each
@@ -91,12 +94,15 @@ def _radios(ap: dict[str, Any], widths: dict[str, int]) -> list[dict[str, Any]]:
                 "power": _int(values.get("power")),
                 "load": load if load is not None and 0 <= load <= 100 else None,
                 "width": widths.get(band),
+                # Sensor with the history of the channel load, for the card's graph
+                "load_entity": load_entity(key),
             }
         )
     return radios
 
 
 SSID_BANDS = {"2": "2.4G", "5": "5G", "6": "6G"}
+GUEST_NAME = re.compile(r"gast|guest", re.IGNORECASE)
 
 
 def _ssids(
@@ -113,6 +119,10 @@ def _ssids(
                     "name": name,
                     "bands": [SSID_BANDS[b] for b in bands.split(",") if b in SSID_BANDS],
                     "hidden": config.get("ssidSsidHidden") == 1,
+                    # Guest networks: client isolation, captive portal or the name says so
+                    "guest": config.get("ssidIsolation") == 1
+                    or config.get("ssidPortalEnable") == 1
+                    or bool(GUEST_NAME.search(name)),
                     "clients": clients.get(name, 0),
                 }
             )
@@ -182,10 +192,22 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "type": ap.get("deviceType"),
                 "firmware": ap.get("versionFirmware"),
                 "bands": bands.get(mac, {}),
-                "radios": _radios(ap, widths.get(mac, {})),
+                "radios": _radios(
+                    ap,
+                    widths.get(mac, {}),
+                    lambda key, mac=mac: ent_reg.async_get_entity_id(
+                        "sensor", DOMAIN, f"{mac}_channel_load_{key}"
+                    ),
+                ),
                 "ssids": _ssids(ap, ssid_configs, ssid_clients.get(mac, {})),
                 "ports": _ports(ap),
                 "wan": ap.get("wan"),
+                "wan_entities": {
+                    "download": ent_reg.async_get_entity_id("sensor", DOMAIN, f"{mac}_wan_download"),
+                    "upload": ent_reg.async_get_entity_id("sensor", DOMAIN, f"{mac}_wan_upload"),
+                }
+                if ap.get("wan")
+                else None,
                 # Physical uplink {parent, port, ownPort, source}, detected or manual
                 "uplink": ap.get("uplink"),
             }
@@ -215,6 +237,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "ip": client.get("ipv4") or None,
                 "device_id": device_id,
                 "entity_id": ent_reg.async_get_entity_id("device_tracker", DOMAIN, mac),
+                "signal_entity": ent_reg.async_get_entity_id("sensor", DOMAIN, f"{mac}_rssi"),
             }
         )
 

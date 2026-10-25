@@ -9,6 +9,10 @@ for every device connected to your GWN access points.
 > [Grandstream GWN Manager Bridge](https://github.com/shopsD/Grandstream-GWN-HomeAssistant-MQTT);
 > both integrations can be installed side by side.
 
+![Network topology card](docs/screenshots/topology.png)
+
+<sub>All screenshots use made-up demo data (see [Screenshots](#screenshots)).</sub>
+
 ## Features
 
 - **Device tracker** per client (`home` / `not_home`), usable for presence and the `person` integration
@@ -61,7 +65,18 @@ floor (highest floor at the top). The view zooms to fit automatically. Drag bubb
 to pan, double-click to fit again. Client names follow the device names you set in Home Assistant.
 Hover for details, click to open the device tracker / AP status.
 
+![Network map card](docs/screenshots/network-map.png)
+
 ## Network topology card
+
+<p>
+  <img src="docs/screenshots/topology-ap-details.png" alt="Access point details" width="32%">
+  <img src="docs/screenshots/topology-gateway.png" alt="Gateway with internet graph" width="66%">
+</p>
+
+Tap a device (or use **Details**) for its radios (channel, width, transmit power, load with a
+24 h graph) and its clients grouped by SSID with signal, band, channel, width, Wi-Fi generation,
+link rates and IP (click to copy).
 
 Uplinks (which switch port each AP and the router are plugged into) are detected automatically –
 the GWN API has no LLDP/MAC table, so they are derived from link speeds and device counts per port.
@@ -78,6 +93,8 @@ appearance: auto         # auto, dark or light
 show_all_ports: false    # also show switch ports without link
 device_images: true      # product pictures of the devices (from the GWN Manager)
 expanded: false          # show the details of all devices (also a button on the card)
+graphs: true             # history graphs: internet, channel load, client signal
+history_hours: 24        # time span of the graphs
 uplinks:                 # optional override – the integration detects uplinks itself
   Living Room AP: Switch:17  # "<device>:<port>", or only the port number if there is one switch
   Office AP: 21
@@ -132,6 +149,13 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - Endpoints without parameters must be called without a request body; a signed `{}` is
   rejected with `Authentication Failure`.
 
+## Entities
+
+<p>
+  <img src="docs/screenshots/device-ap.png" alt="Access point device" width="49%">
+  <img src="docs/screenshots/device-client.png" alt="Client device" width="49%">
+</p>
+
 ## Development
 
 See [AGENTS.md](AGENTS.md) for the architecture, GWN API notes, conventions and how to run a
@@ -139,12 +163,21 @@ local Home Assistant test instance (`scripts/`).
 
 ## Releasing
 
-1. Bump `version` in `custom_components/gwn_manager/manifest.json`
-2. Create a GitHub release with the matching tag, e.g. `v0.2.1`
+1. Bump `version` in `custom_components/gwn_manager/manifest.json` and the version constants of
+   both cards.
+2. If the cards or entities look different now, update the [screenshots](#screenshots).
+3. Push, wait for the **Validate** workflow, then create a GitHub release with the matching tag
+   and a title with a short summary, e.g. `v0.5.9 – History graphs` (HACS shows the title).
 
 HACS installs the integration directly from the tagged sources. (Zip release assets are not
 used: GitHub's release download redirect currently sends a header larger than aiohttp
 accepts, so HACS cannot download them.)
+
+## Screenshots
+
+The screenshots are taken from a local Home Assistant test instance connected to a **demo
+server** with made-up devices, clients, SSIDs and IP addresses – never from a real network.
+See *Screenshots* in [AGENTS.md](AGENTS.md) for the steps (`scripts/demo/`).
 
 ## Events
 

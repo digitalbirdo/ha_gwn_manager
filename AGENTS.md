@@ -31,6 +31,8 @@ custom_components/gwn_manager/
   frontend/gwn-network-card.js   Network map card (plain web component, no build step)
   translations/en.json, de.json
 scripts/            Dev instance, onboarding, adding the integration, card screenshots
+scripts/demo/       Demo GWN API server with made-up data, README screenshots
+docs/screenshots/   README screenshots (demo data only)
 .github/workflows/validate.yml   hassfest + HACS validation on every push
 ```
 
@@ -156,21 +158,50 @@ flaky – call the card's methods via `page.evaluate` instead (e.g. `_showToolti
 
 1. Bump `version` in `custom_components/gwn_manager/manifest.json` and the version constants of
    both cards (`VERSION` in `gwn-network-card.js`, `TOPOLOGY_VERSION` in `gwn-topology-card.js`).
-2. Commit and push to `main`; wait for the **Validate** workflow (hassfest + HACS) to pass.
-3. `gh release create vX.Y.Z --target main --title "vX.Y.Z – <short summary>" --notes …`.
+2. If the cards or entities changed visibly, retake the screenshots (see *Screenshots* below) and
+   commit them with the release.
+3. Commit and push to `main`; wait for the **Validate** workflow (hassfest + HACS) to pass.
+4. `gh release create vX.Y.Z --target main --title "vX.Y.Z – <short summary>" --notes …`.
    Always give the title a short summary after the version: HACS shows the release title in its
    version list, a bare version number tells users nothing.
-4. Users update through HACS and restart Home Assistant.
+5. Users update through HACS and restart Home Assistant.
 
 HACS installs from the tagged sources. Don't switch to `zip_release`: GitHub's
 release-download redirect currently sends a ~9 KB header that HACS (aiohttp, 8190 byte limit)
 can't read.
 
+## Screenshots
+
+README screenshots (`docs/screenshots/`) never come from a real network. They are taken from a
+dev instance connected to the **demo server** `scripts/demo/gwn_demo_server.py`: a fake GWN open
+API with made-up devices (gateway GWN7062, switch GWN7822P, three GWN7665), ~30 clients, the SSIDs
+Home / Home-IoT / Guest and 192.168.50.x addresses; values change over time. Response shapes come
+from `scripts/demo/fixtures.json` (sanitized templates of a real GWN Manager).
+
+1. Start the demo server (product pictures optional, e.g. downloaded from your own GWN Manager
+   `https://<gwn-manager>/img/topo/main_icon/<model>.png` into a local folder – don't commit them):
+   `python scripts/demo/gwn_demo_server.py --images <folder>` (port 8899).
+2. Use a **separate** dev instance (`scripts/dev-instance.sh setup ../ha-demo`, run, onboard; stop
+   other instances on port 8123 first), then
+   `GWN_URL=http://127.0.0.1:8899 GWN_APP_ID=demo GWN_APP_SECRET=demo .venv/bin/python
+   ../ha_gwn_manager/scripts/dev-add-entry.py --token-file token.txt` and
+   `.venv/bin/python ../ha_gwn_manager/scripts/demo/setup-demo.py --token-file token.txt`
+   (areas/floors, entry title, dashboard "Network" with both cards).
+3. For the graphs: stop Home Assistant, `python scripts/demo/backfill-history.py
+   ../ha-demo/config/home-assistant_v2.db` (24 h of made-up history), start it again.
+4. `node scripts/demo/screenshots.mjs ../ha-demo/credentials.txt docs/screenshots`
+   (Playwright as for `card-screenshot.mjs`; dark mode, English, 2x).
+5. Look at every image before committing: no real names, IPs, MACs or SSIDs. The network map is
+   force-directed – retake it if labels overlap badly.
+
+If the GWN API changes, rebuild the fixtures from a real GWN Manager with
+`scripts/demo/make_fixtures.py` and review the result (it scrubs names, MACs, IPs, SSIDs, serials,
+coordinates and keys, but check with `grep` for your own values before committing).
+
 ## Open ideas
 
 - Unit tests with `pytest-homeassistant-custom-component` and a mocked API.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
-- README screenshot of the card with sample data.
 - Change indication in the topology card, only for meaningful events (not every RSSI/rate update,
   those change for almost all clients every ~90 s): client connected (briefly highlighted),
   disconnected (stays greyed out for a few seconds; the card re-renders fully, so it has to keep

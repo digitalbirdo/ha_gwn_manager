@@ -1,0 +1,1351 @@
+{
+ "ap_info": {
+  "GWN7822P": {
+   "mac": "00:0B:82:5A:FF:FF",
+   "network": "",
+   "upTime": "4959801",
+   "cpuUsage": "",
+   "apType": "GWN7822P",
+   "partNumber": "",
+   "bootVersion": "3.6.9.55156",
+   "firmwareVersion": "192.168.50.250",
+   "ip": "192.168.50.250",
+   "ipv4": "192.168.50.250",
+   "ipv6": "",
+   "siteId": "4100",
+   "clientBridgeMode": -1,
+   "g24": [
+    {
+     "value": "",
+     "key": "channel"
+    },
+    {
+     "value": "",
+     "key": "clients"
+    },
+    {
+     "value": "",
+     "key": "power"
+    }
+   ],
+   "g5": [
+    {
+     "value": "",
+     "key": "channel"
+    },
+    {
+     "value": "",
+     "key": "clients"
+    },
+    {
+     "value": "",
+     "key": "power"
+    }
+   ],
+   "g6": [
+    {
+     "value": "",
+     "key": "channel"
+    },
+    {
+     "value": "",
+     "key": "clients"
+    },
+    {
+     "value": "",
+     "key": "power"
+    }
+   ],
+   "loadAverage": [],
+   "usedMemory": "0 MB",
+   "channelload_2g4": "",
+   "channelload_5g": "",
+   "SNR_2g4": "",
+   "SNR_5g": "",
+   "deviceName": "",
+   "deviceRemarks": "",
+   "longitude": "",
+   "latitude": "",
+   "SNR_6g": "",
+   "channelload_6g": ""
+  },
+  "GWN7062": {
+   "mac": "00:0B:82:5A:FF:FF",
+   "network": "",
+   "upTime": "9749",
+   "cpuUsage": "201408%",
+   "apType": "GWN7062",
+   "partNumber": "",
+   "bootVersion": "192.168.50.250",
+   "firmwareVersion": "192.168.50.250",
+   "ip": "192.168.50.250",
+   "ipv4": "192.168.50.250",
+   "ipv6": "",
+   "siteId": "4100",
+   "clientBridgeMode": -1,
+   "g24": [
+    {
+     "value": "1",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "17",
+     "key": "power"
+    }
+   ],
+   "g5": [
+    {
+     "value": "36",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "20",
+     "key": "power"
+    }
+   ],
+   "g6": [
+    {
+     "value": "",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "",
+     "key": "power"
+    }
+   ],
+   "loadAverage": [
+    201408,
+    199104,
+    197152
+   ],
+   "temperature": "47℃",
+   "usedMemory": "303 MB",
+   "channelload_2g4": "",
+   "channelload_5g": "",
+   "SNR_2g4": "",
+   "SNR_5g": "",
+   "deviceName": "",
+   "deviceRemarks": "",
+   "longitude": "",
+   "latitude": "",
+   "SNR_6g": "",
+   "channelload_6g": ""
+  },
+  "GWN7665": {
+   "mac": "00:0B:82:5A:FF:FF",
+   "network": "",
+   "upTime": "662110",
+   "cpuUsage": "10.0%",
+   "apType": "GWN7665",
+   "partNumber": "",
+   "bootVersion": "192.168.50.250",
+   "firmwareVersion": "192.168.50.250",
+   "ip": "192.168.50.250",
+   "ipv4": "192.168.50.250",
+   "ipv6": "",
+   "siteId": "4100",
+   "clientBridgeMode": -1,
+   "linkSpeed": [
+    {
+     "key1": "port0_speed",
+     "key2": "port0_full_duplex",
+     "value2": "1",
+     "value1": "2500",
+     "type": 0,
+     "status": "connected"
+    },
+    {
+     "key1": "port1_speed",
+     "key2": "port1_full_duplex",
+     "value2": "0",
+     "value1": "0",
+     "type": 0,
+     "status": "disconnected"
+    }
+   ],
+   "g24": [
+    {
+     "value": "10",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "17",
+     "key": "power"
+    }
+   ],
+   "g5": [
+    {
+     "value": "40",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "20",
+     "key": "power"
+    }
+   ],
+   "g6": [
+    {
+     "value": "37",
+     "key": "channel"
+    },
+    {
+     "value": "0",
+     "key": "clients"
+    },
+    {
+     "value": "20",
+     "key": "power"
+    }
+   ],
+   "loadAverage": [
+    218464,
+    216128,
+    215712
+   ],
+   "temperature": "54℃",
+   "usedMemory": "199 MB",
+   "channelload_2g4": 37,
+   "channelload_5g": 2,
+   "SNR_2g4": "-47",
+   "SNR_5g": "-64",
+   "throughput": 11500,
+   "deviceName": "",
+   "deviceRemarks": "",
+   "longitude": "",
+   "latitude": "",
+   "SNR_6g": "-78  ",
+   "channelload_6g": 1
+  }
+ },
+ "device_info": {
+  "GWN7822P": {
+   "ssidNumber": 0,
+   "deviceType": "SWITCH",
+   "poeInfo": [
+    {
+     "type": 0,
+     "value": "24",
+     "key": "POEPort"
+    },
+    {
+     "unit": "W",
+     "type": 0,
+     "value": "360",
+     "key": "PoEPowerSupply"
+    },
+    {
+     "unit": "W",
+     "type": 0,
+     "value": "20",
+     "key": "PoEReservedPower"
+    },
+    {
+     "unit": "W",
+     "type": 0,
+     "value": "25.3",
+     "key": "PoEUsePower"
+    },
+    {
+     "unit": "W",
+     "type": 0,
+     "value": "60",
+     "key": "PoERealtTimePower"
+    },
+    {
+     "type": 0,
+     "value": "802.3 af/at/bt(type3)",
+     "key": "PoESupportType"
+    },
+    {
+     "type": 1,
+     "value": [
+      {
+       "unit": "V",
+       "operFlowCtrl": true,
+       "voltageSupply": "54.0"
+      },
+      {
+       "unit": "V",
+       "operFlowCtrl": true,
+       "voltageSupply": "54.0"
+      },
+      {
+       "unit": "V",
+       "operFlowCtrl": true,
+       "voltageSupply": "54.0"
+      },
+      {
+       "unit": "V",
+       "operFlowCtrl": true,
+       "voltageSupply": "54.0"
+      }
+     ],
+     "key": "PoEChips"
+    }
+   ],
+   "latitude": "",
+   "isOnlySupportRemoteControl": false,
+   "fxsSwitch": 0,
+   "disableConfig": 0,
+   "vlanCount": 16,
+   "isStack": 0,
+   "stackInfo": [],
+   "result": [
+    {
+     "type": 0,
+     "value": "",
+     "key": "name"
+    },
+    {
+     "type": 0,
+     "value": "GWN7822P",
+     "key": "apType"
+    },
+    {
+     "type": 0,
+     "value": "4959801",
+     "key": "upTime"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:18",
+     "key": "systemTime"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "ipV4"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "ipV4Gateway"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "ipV6"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "ipV6Global"
+    },
+    {
+     "type": 0,
+     "value": "::",
+     "key": "ipV6Gateway"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "PN"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "SN"
+    },
+    {
+     "type": 0,
+     "value": "00:0B:82:5A:FF:FF",
+     "key": "mac"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "firmwareVersion"
+    },
+    {
+     "type": 0,
+     "value": "V1.1A",
+     "key": "hardwareVersion"
+    },
+    {
+     "type": 0,
+     "value": "3.6.9.55156",
+     "key": "bootVersion"
+    },
+    {
+     "type": 0,
+     "value": "5%",
+     "key": "cpuUtilz"
+    },
+    {
+     "type": 0,
+     "value": "117 MB",
+     "key": "usedMemory"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250.4.1.42397",
+     "key": "devOid"
+    },
+    {
+     "type": 1,
+     "value": [
+      {
+       "key": "PWR",
+       "value": "inuse"
+      },
+      {
+       "key": "RPS",
+       "value": "unconnected"
+      }
+     ],
+     "key": "switchPower"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "remarks"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "additionalRemarks"
+    },
+    {
+     "type": 1,
+     "value": null,
+     "key": "fan"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:22",
+     "key": "offlineTimeStr"
+    }
+   ],
+   "sshSwitch": "1",
+   "isSupportPoe": true,
+   "online": 1,
+   "siteId": 4100,
+   "model": "GWN7822P",
+   "wireless": 0,
+   "deviceInfoExtra": {
+    "siteName": "",
+    "dayUsage": 0,
+    "clientCount": 0
+   },
+   "longitude": ""
+  },
+  "GWN7062": {
+   "ssidNumber": 32,
+   "deviceType": "ROUTER",
+   "latitude": "",
+   "portInfo": [
+    {
+     "portName": "WAN",
+     "portCustomName": "",
+     "silkNum": "",
+     "silkScreenPort": "WAN",
+     "iconType": "down",
+     "portDesc": "",
+     "index": "0,0,4",
+     "portId": "0",
+     "role": "1",
+     "type": "0",
+     "typeForManagementPlatform": null,
+     "linkStatus": "1",
+     "portSpeed": "6",
+     "isCombo": false,
+     "wanId": "0",
+     "wanName": "WAN1",
+     "wanMac": "",
+     "connectDuration": "9581",
+     "ipv4Info": {
+      "type": "0",
+      "connectStatus": "1",
+      "ip4Address": "192.168.50.250",
+      "gatewayStatus": "0",
+      "gateway": "192.168.50.250",
+      "firstDns": "192.168.50.250",
+      "secondDns": null,
+      "pppoeName": null
+     },
+     "ipv6Info": {
+      "ip6Type": null,
+      "ip6ConnectStatus": null,
+      "ip6LinkAddress": null,
+      "ip6GatewayStatus": null,
+      "ip6Gateway": null,
+      "ip6FirstDns": null,
+      "ip6SecondDns": null,
+      "ip6Address": null
+     },
+     "aggregate": {
+      "txPackets": "585085",
+      "txBytes": "226259947",
+      "rxPackets": "1607671",
+      "rxBytes": "1517683643"
+     },
+     "defaultChecked": true
+    },
+    {
+     "portName": "LAN4/WAN",
+     "portCustomName": "",
+     "silkNum": "",
+     "silkScreenPort": "LAN4/WAN",
+     "iconType": "down",
+     "portDesc": "",
+     "index": "0,0,3",
+     "portId": "1",
+     "role": "0",
+     "type": "0",
+     "typeForManagementPlatform": null,
+     "linkStatus": "0",
+     "portSpeed": "0",
+     "isCombo": false,
+     "defaultChecked": false
+    },
+    {
+     "portName": "LAN3",
+     "portCustomName": "",
+     "silkNum": "",
+     "silkScreenPort": "LAN3",
+     "iconType": "down",
+     "portDesc": "",
+     "index": "0,0,2",
+     "portId": "2",
+     "role": "0",
+     "type": "0",
+     "typeForManagementPlatform": null,
+     "linkStatus": "0",
+     "portSpeed": "0",
+     "isCombo": false,
+     "defaultChecked": false
+    },
+    {
+     "portName": "LAN2",
+     "portCustomName": "",
+     "silkNum": "",
+     "silkScreenPort": "LAN2",
+     "iconType": "down",
+     "portDesc": "",
+     "index": "0,0,1",
+     "portId": "3",
+     "role": "0",
+     "type": "0",
+     "typeForManagementPlatform": null,
+     "linkStatus": "0",
+     "portSpeed": "0",
+     "isCombo": false,
+     "defaultChecked": false
+    },
+    {
+     "portName": "LAN1",
+     "portCustomName": "",
+     "silkNum": "",
+     "silkScreenPort": "LAN1",
+     "iconType": "down",
+     "portDesc": "",
+     "index": "0,0,0",
+     "portId": "4",
+     "role": "0",
+     "type": "0",
+     "typeForManagementPlatform": null,
+     "linkStatus": "1",
+     "portSpeed": "6",
+     "isCombo": false,
+     "defaultChecked": false
+    }
+   ],
+   "isOnlySupportRemoteControl": false,
+   "fxsSwitch": 0,
+   "disableConfig": 0,
+   "vlanCount": 8,
+   "result": [
+    {
+     "type": 0,
+     "value": "",
+     "key": "name"
+    },
+    {
+     "type": 0,
+     "value": "GWN7062",
+     "key": "apType"
+    },
+    {
+     "type": 0,
+     "value": "9749",
+     "key": "upTime"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:20",
+     "key": "systemTime"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "ip"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "sn"
+    },
+    {
+     "type": 0,
+     "value": "00:0B:82:5A:FF:FF",
+     "key": "mac"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "partNumber"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "firmwareVersion"
+    },
+    {
+     "type": 0,
+     "value": "V1.1B",
+     "key": "hardwareVersion"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "bootVersion"
+    },
+    {
+     "type": 0,
+     "value": [
+      201408,
+      199104,
+      197152
+     ],
+     "key": "loadAverage"
+    },
+    {
+     "type": 0,
+     "value": "47℃",
+     "key": "temperature"
+    },
+    {
+     "type": 0,
+     "value": "303 MB",
+     "key": "usedMemory"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "remarks"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "additionalRemarks"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:22",
+     "key": "offlineTimeStr"
+    }
+   ],
+   "sshSwitch": "1",
+   "isSupportPoe": false,
+   "online": 1,
+   "siteId": 4100,
+   "model": "GWN7062",
+   "wireless": 1,
+   "radioFrequencyInfo": {
+    "radioFrequency5g": {
+     "ssids": [
+      "",
+      ""
+     ],
+     "clients": "0",
+     "bssid5gs": [
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF"
+     ],
+     "bssidIds": [
+      null,
+      null
+     ],
+     "channel": "36",
+     "power": "20",
+     "ssidRemarks": [
+      "",
+      ""
+     ]
+    },
+    "radioFrequency2_4g": {
+     "ssids": [
+      "",
+      "",
+      ""
+     ],
+     "clients": "7",
+     "bssid2_4gs": [
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF"
+     ],
+     "bssidIds": [
+      null,
+      null,
+      null
+     ],
+     "channel": "1",
+     "power": "17",
+     "ssidRemarks": [
+      "",
+      "",
+      ""
+     ]
+    }
+   },
+   "deviceInfoExtra": {
+    "siteName": "",
+    "dayUsage": 0,
+    "clientCount": 0
+   },
+   "longitude": ""
+  },
+  "GWN7665": {
+   "ssidNumber": 48,
+   "deviceType": "AP",
+   "latitude": "",
+   "supportModule": [
+    "ap_config_l2tpv3"
+   ],
+   "isOnlySupportRemoteControl": false,
+   "fxsSwitch": 0,
+   "disableConfig": 0,
+   "vlanCount": 16,
+   "result": [
+    {
+     "type": 0,
+     "value": "",
+     "key": "name"
+    },
+    {
+     "type": 0,
+     "value": "GWN7665",
+     "key": "apType"
+    },
+    {
+     "type": 1,
+     "value": [
+      {
+       "key1": "port0_speed",
+       "key2": "port0_full_duplex",
+       "value2": "1",
+       "value1": "2500",
+       "type": 0,
+       "status": "connected"
+      },
+      {
+       "key1": "port1_speed",
+       "key2": "port1_full_duplex",
+       "value2": "0",
+       "value1": "0",
+       "type": 0,
+       "status": "disconnected"
+      }
+     ],
+     "key": "linkSpeed"
+    },
+    {
+     "type": 0,
+     "value": {
+      "txRateBytes": 5928,
+      "rxRateBytes": 3442
+     },
+     "key": "apRateBytes"
+    },
+    {
+     "type": 0,
+     "value": "662348",
+     "key": "upTime"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:22",
+     "key": "systemTime"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "ip"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250/24",
+     "key": "ipv4GatewaySubnet"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "ipv6"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "sn"
+    },
+    {
+     "type": 0,
+     "value": "00:0B:82:5A:FF:FF",
+     "key": "mac"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "partNumber"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "firmwareVersion"
+    },
+    {
+     "type": 0,
+     "value": "192.168.50.250",
+     "key": "bootVersion"
+    },
+    {
+     "type": 0,
+     "value": [
+      222944,
+      217760,
+      215616
+     ],
+     "key": "loadAverage"
+    },
+    {
+     "type": 0,
+     "value": "55℃",
+     "key": "temperature"
+    },
+    {
+     "type": 0,
+     "value": "199 MB",
+     "key": "usedMemory"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "remarks"
+    },
+    {
+     "type": 0,
+     "value": "",
+     "key": "additionalRemarks"
+    },
+    {
+     "type": 0,
+     "value": "2026-10-25 02:22",
+     "key": "offlineTimeStr"
+    }
+   ],
+   "sshSwitch": "0",
+   "isSupportPoe": false,
+   "clientBridgeMode": -1,
+   "repeatTime": 30,
+   "repeat": "1",
+   "online": 1,
+   "siteId": 4100,
+   "model": "GWN7665",
+   "model_compare": "https://info.gwn.cloud/model/compare",
+   "wireless": 1,
+   "isHistoryData": false,
+   "radioFrequencyInfo": {
+    "radioFrequency6g": {
+     "ssids": [
+      ""
+     ],
+     "clients": "0",
+     "bssid6gs": [
+      "00:0B:82:5A:FF:FF"
+     ],
+     "bssidIds": [
+      null
+     ],
+     "channel": "37",
+     "power": "20",
+     "ssidRemarks": [
+      ""
+     ]
+    },
+    "radioFrequency5g": {
+     "ssids": [
+      "",
+      ""
+     ],
+     "clients": "1",
+     "bssid5gs": [
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF"
+     ],
+     "bssidIds": [
+      null,
+      null
+     ],
+     "channel": "40",
+     "power": "20",
+     "ssidRemarks": [
+      "",
+      ""
+     ]
+    },
+    "radioFrequency2_4g": {
+     "ssids": [
+      "",
+      "",
+      "",
+      ""
+     ],
+     "clients": "12",
+     "bssid2_4gs": [
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF",
+      "00:0B:82:5A:FF:FF"
+     ],
+     "bssidIds": [
+      null,
+      null,
+      null,
+      null
+     ],
+     "channel": "10",
+     "power": "17",
+     "ssidRemarks": [
+      "",
+      "",
+      "",
+      ""
+     ]
+    }
+   },
+   "deviceInfoExtra": {
+    "siteName": "",
+    "dayUsage": 0,
+    "clientCount": 0
+   },
+   "longitude": ""
+  }
+ },
+ "switch_port": {
+  "adminSpeed": "1000",
+  "portsProfileName": null,
+  "profileOverride": false,
+  "inRate": "0",
+  "operSpeed": null,
+  "outRate": "0",
+  "portId": "0",
+  "type": "coper",
+  "isStack": 0,
+  "isSourcePort": false,
+  "portType": 0,
+  "dstPort": "",
+  "lag": "None",
+  "poeIn": null,
+  "silkScreenPort": "1",
+  "adminStatus": true,
+  "name": "",
+  "operStatus": "down",
+  "powerflag": "off",
+  "describe": "",
+  "clientCount": "0"
+ },
+ "ap_list": {
+  "status": 1,
+  "apType": "GWN7822P",
+  "mac": "00:0B:82:5A:FF:FF",
+  "name": "",
+  "ip": "192.168.50.250",
+  "upTime": 4959801,
+  "usage": 0,
+  "upload": 0,
+  "download": 0,
+  "channel": null,
+  "channel5g": null,
+  "clients": 14,
+  "lastFwVersion": null,
+  "versionFirmware": "192.168.50.250",
+  "networkId": 1,
+  "ipv6": "",
+  "ipv4": "192.168.50.250",
+  "firstSeen": 1776028802000,
+  "lastSeen": 1792891377158,
+  "siteId": 4100,
+  "remarks": "",
+  "additionalRemarks": null,
+  "longitude": "",
+  "latitude": ""
+ },
+ "ssid_list": {
+  "id": 9,
+  "ssidName": "",
+  "ssidRemark": "",
+  "wifiEnabled": 1,
+  "vlanId": null,
+  "onlineDevices": 1,
+  "scheduleEnabled": 1,
+  "portalEnabled": 0,
+  "securityMode": 3,
+  "macFilteringEnabled": 0,
+  "clientIsolationEnabled": 0
+ },
+ "ssid_conf": {
+  "id": 9,
+  "ssidSsid": "",
+  "ssidRemark": "",
+  "ssidEnable": 1,
+  "ssidVlan": 0,
+  "ssidVlanid": null,
+  "ssidRadiusDynamicVlan": null,
+  "ssidSsidBand": "2",
+  "ssidNewSsidBand": "2",
+  "ssidSsidHidden": 0,
+  "ssidWifiClientLimit": null,
+  "ssidPortalEnable": 0,
+  "ssidEncryption": 3,
+  "ssidWepKey": null,
+  "ssidWpaKeyMode": 0,
+  "ssidWpaEncryption": 0,
+  "ssidWpaKey": "",
+  "ssidRadiusServer": null,
+  "ssidRadiusPort": null,
+  "ssidRadiusSecret": null,
+  "ssidRadiusAcctServer": null,
+  "ssidRadiusAcctPort": null,
+  "ssidRadiusAcctSecret": null,
+  "ssidRadiusNasId": null,
+  "ssidBridgeEnable": 0,
+  "ssidMacFiltering": 0,
+  "ssidIsolation": 0,
+  "ssidIsolationMode": null,
+  "ssidGatewayMac": null,
+  "ssidVoiceEnterprise": 1,
+  "ssid11V": 1,
+  "ssid11R": 1,
+  "ssid11K": 1,
+  "ssidDtimPeriod": 1,
+  "ssidMcastToUcast": 0,
+  "ssidProxyarp": 0,
+  "ssidUapsd": 1,
+  "ssidTwtEnable": 0,
+  "ssidStaIdleTimeout": 300,
+  "ssid11W": 0,
+  "ssidBms": 0,
+  "ssidClientIPAssignment": 0,
+  "ssidHs20Profile": null,
+  "ssidHs20": null,
+  "ssidSecondaryRadiusEnable": null,
+  "ssidSecondaryRadiusServer": null,
+  "ssidSecondaryRadiusPort": null,
+  "ssidSecondaryRadiusSecret": null,
+  "ssidSecondaryRadiusAcctEnable": null,
+  "ssidSecondaryRadiusAcctServer": null,
+  "ssidSecondaryRadiusAcctPort": null,
+  "ssidSecondaryRadiusAcctSecret": null,
+  "ssidBonjourForward": "0",
+  "ssidDvlanServices": null,
+  "ssidSecurityType": 1,
+  "radiusProfile": null,
+  "ppskProfile": null,
+  "hsRelease": null,
+  "bandwidthType": null,
+  "bandwidthRules": null,
+  "osFiltering": 0,
+  "osWhitelist": "",
+  "osBlacklist": "",
+  "ssidPortalPolicy": null,
+  "ssidGatewayMacList": null,
+  "ssidMacAuth": 0,
+  "ssidEnableMlo": 0,
+  "wpaKeyScheduleEnable": null,
+  "ssidRadiusMacFormat": null,
+  "ssidMultiVlanEnable": null,
+  "ssidIpsg": null
+ },
+ "client_wifi": {
+  "timestamp": 0,
+  "rowKey": null,
+  "count": null,
+  "delta_bytes_rx": "0",
+  "delta_bytes_total": "86",
+  "delta_bytes_tx": "86",
+  "enterprise_id": null,
+  "network_id": null,
+  "update_time": null,
+  "c1": null,
+  "c1Array": null,
+  "id": 3230385,
+  "networkId": 1,
+  "apId": "00:0B:82:5A:FF:FF",
+  "clientId": "00:0B:82:5A:FF:FF",
+  "ipv4": "192.168.50.250",
+  "ipv6": "",
+  "channel": 10,
+  "channel2g4": null,
+  "channel5g": null,
+  "channel6g": null,
+  "channelMlo": "",
+  "rssi": -78,
+  "rssi2g4": null,
+  "rssi5g": null,
+  "rssi6g": null,
+  "rssiMlo": "",
+  "assoctime": "1h13m",
+  "deltaTime": null,
+  "zone": null,
+  "ssidId": 2,
+  "ssid": "",
+  "channelClass": 2,
+  "channelClassStr": "2.4G",
+  "portalTime": null,
+  "portalStats": "0",
+  "portalEnable": 0,
+  "throughput": null,
+  "txBytes": 4356312,
+  "txPackets": null,
+  "rxBytes": 2847243,
+  "rxPackets": null,
+  "name": "",
+  "createTime": null,
+  "modifyTime": null,
+  "online": 1,
+  "bandwidthRules": null,
+  "wired": 2,
+  "isbridge": 0,
+  "lastactive": "2026-10-25T01:13:18.000+0000",
+  "lastseen": null,
+  "authType": 0,
+  "email": null,
+  "gender": null,
+  "ageRang": null,
+  "socialName": null,
+  "portalStatsBinary": null,
+  "totalTxBytes": null,
+  "totalRxBytes": null,
+  "formindex": null,
+  "authName": null,
+  "loginTime": null,
+  "txRate": 1,
+  "rxRate": 6,
+  "portalInfo": null,
+  "staMode": "11NG_HT20",
+  "staMode2g4": null,
+  "staMode5g": null,
+  "staMode6g": null,
+  "staModeMlo": "",
+  "connectMode": null,
+  "os": null,
+  "port": "",
+  "portId": null,
+  "vid": null,
+  "isNeighbor": 0,
+  "sysDescp": null,
+  "sysName": null,
+  "totalBytes": 7203555,
+  "policyName": null,
+  "lastactiveTime": null,
+  "accessNames": null,
+  "block": 1,
+  "apName": "",
+  "portalTimeDisplay": null,
+  "dhcpManufacture": "",
+  "dhcpHostname": "",
+  "dhcpOs": "",
+  "clientName": null,
+  "loginTimeStr": null,
+  "txRate2g4": null,
+  "txRate5g": null,
+  "txRate6g": null,
+  "txRateMlo": "",
+  "rxRate2g4": null,
+  "rxRate5g": null,
+  "rxRate6g": null,
+  "rxRateMlo": "",
+  "lastSeen": "2026-10-25 02:58",
+  "firstSeen": "2026-04-12 14:58",
+  "rateBytesMap": null,
+  "assocSecond": 4428,
+  "isGuest": 0,
+  "ipNum": null,
+  "switchPortName": "",
+  "deviceKind": null,
+  "apType": null,
+  "status": null,
+  "array": null,
+  "currentDate": null,
+  "vlanId": "1",
+  "iconId": "others",
+  "apLockFlag": false,
+  "fileName": null,
+  "username": null,
+  "params": null,
+  "deviceType": "AP",
+  "deviceGroupName": "Default",
+  "bssid": "",
+  "dpiEnable": null,
+  "ssidRemark": "",
+  "encryption": null,
+  "ssidEncryptionDesc": "-",
+  "vlanName": null,
+  "guestSsidName": null,
+  "guestVlanName": null,
+  "untilNow": 0,
+  "clientRestrict": null,
+  "nullTime": false
+ },
+ "client_wired": {
+  "timestamp": 0,
+  "rowKey": null,
+  "count": null,
+  "delta_bytes_rx": "152",
+  "delta_bytes_total": "314",
+  "delta_bytes_tx": "162",
+  "enterprise_id": null,
+  "network_id": null,
+  "update_time": null,
+  "c1": null,
+  "c1Array": null,
+  "id": 3230395,
+  "networkId": 1,
+  "apId": "00:0B:82:5A:FF:FF",
+  "clientId": "00:0B:82:5A:FF:FF",
+  "ipv4": "192.168.50.250",
+  "ipv6": null,
+  "channel": null,
+  "channel2g4": null,
+  "channel5g": null,
+  "channel6g": null,
+  "channelMlo": "",
+  "rssi": null,
+  "rssi2g4": null,
+  "rssi5g": null,
+  "rssi6g": null,
+  "rssiMlo": "",
+  "assoctime": "2h23m",
+  "deltaTime": null,
+  "zone": null,
+  "ssidId": -1,
+  "ssid": "",
+  "channelClass": null,
+  "channelClassStr": "",
+  "portalTime": null,
+  "portalStats": null,
+  "portalEnable": 0,
+  "throughput": null,
+  "txBytes": 3909,
+  "txPackets": null,
+  "rxBytes": 1721,
+  "rxPackets": null,
+  "name": "",
+  "createTime": null,
+  "modifyTime": null,
+  "online": 1,
+  "bandwidthRules": null,
+  "wired": 1,
+  "isbridge": null,
+  "lastactive": "2026-10-25T01:13:34.000+0000",
+  "lastseen": null,
+  "authType": null,
+  "email": null,
+  "gender": null,
+  "ageRang": null,
+  "socialName": null,
+  "portalStatsBinary": null,
+  "totalTxBytes": null,
+  "totalRxBytes": null,
+  "formindex": null,
+  "authName": null,
+  "loginTime": null,
+  "txRate": 0,
+  "rxRate": 0,
+  "portalInfo": null,
+  "staMode": "",
+  "staMode2g4": null,
+  "staMode5g": null,
+  "staMode6g": null,
+  "staModeMlo": "",
+  "connectMode": null,
+  "os": null,
+  "port": "",
+  "portId": null,
+  "vid": null,
+  "isNeighbor": 0,
+  "sysDescp": null,
+  "sysName": null,
+  "totalBytes": 5630,
+  "policyName": null,
+  "lastactiveTime": null,
+  "accessNames": null,
+  "block": 1,
+  "apName": "",
+  "portalTimeDisplay": null,
+  "dhcpManufacture": "",
+  "dhcpHostname": "",
+  "dhcpOs": "",
+  "clientName": null,
+  "loginTimeStr": null,
+  "txRate2g4": null,
+  "txRate5g": null,
+  "txRate6g": null,
+  "txRateMlo": "",
+  "rxRate2g4": null,
+  "rxRate5g": null,
+  "rxRate6g": null,
+  "rxRateMlo": "",
+  "lastSeen": "2026-10-25 02:58",
+  "firstSeen": "2026-04-12 14:58",
+  "rateBytesMap": null,
+  "assocSecond": 8596,
+  "isGuest": 0,
+  "ipNum": null,
+  "switchPortName": "",
+  "deviceKind": null,
+  "apType": null,
+  "status": null,
+  "array": null,
+  "currentDate": null,
+  "vlanId": "1",
+  "iconId": "others",
+  "apLockFlag": false,
+  "fileName": null,
+  "username": null,
+  "params": null,
+  "deviceType": "ROUTER",
+  "deviceGroupName": "Default",
+  "bssid": "",
+  "dpiEnable": null,
+  "ssidRemark": null,
+  "encryption": null,
+  "ssidEncryptionDesc": "-",
+  "vlanName": null,
+  "guestSsidName": null,
+  "guestVlanName": null,
+  "untilNow": 0,
+  "clientRestrict": null,
+  "nullTime": false
+ }
+}
