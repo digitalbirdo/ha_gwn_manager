@@ -9,7 +9,7 @@ from math import perm
 from datetime import datetime, timedelta
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL, CONF_VERIFY_SSL
@@ -21,6 +21,9 @@ from homeassistant.util import dt as dt_util
 
 from .api import GWNAuthError, GWNClient, GWNError
 from .fast.state import FastState, apply_overlay
+
+if TYPE_CHECKING:
+    from .fast.manager import FastSources
 from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
@@ -158,6 +161,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         # Syslog/SNMP state, set up in __init__.py when the options enable them.
         self.fast: FastState | None = None
         self.fast_max_age = timedelta(seconds=30)
+        self.fast_sources: FastSources | None = None
         # Wired clients seen connected since setup (MAC -> last record); the API
         # only lists wired clients while they are connected.
         self._wired: dict[str, dict[str, Any]] = {}

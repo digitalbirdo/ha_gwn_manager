@@ -211,5 +211,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "syslog_port_unavailable": {
+      "title": "Syslog-Port {port} nicht verfügbar",
+      "description": "GWN Manager konnte auf UDP-Port {port} keine Syslog-Meldungen empfangen ({error}). Schnelle Aktualisierung per Syslog ist aus, alles andere funktioniert weiter. Wähle in den Optionen der Integration einen anderen Port und trage denselben Port im GWN Manager als Syslog-Server-Port ein."
+    }
   }
 }

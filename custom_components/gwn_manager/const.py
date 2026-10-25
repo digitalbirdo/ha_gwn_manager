@@ -36,3 +36,18 @@ EVENT_CLIENT_ROAMED = f"{DOMAIN}_client_roamed"
 # Byte counters of connected clients are refreshed by GWN Manager about every
 # 90 s. If they did not change for this long, the client is idle.
 THROUGHPUT_IDLE_AFTER = 240
+
+# Fast sources: read the devices directly (syslog push, SNMP poll) on top of the API.
+CONF_FAST_SYSLOG = "fast_syslog"
+CONF_SYSLOG_PORT = "syslog_port"
+# Also evaluate the JSON events the devices only send at syslog level debug.
+CONF_SYSLOG_DEBUG_EVENTS = "syslog_debug_events"
+CONF_FAST_SNMP = "fast_snmp"
+CONF_SNMP_COMMUNITY = "snmp_community"
+CONF_SNMP_INTERVAL = "snmp_interval"
+DEFAULT_SYSLOG_PORT = 5514
+DEFAULT_SNMP_COMMUNITY = "public"
+# One SNMP poll of all devices takes ~10-15 s (the agents only answer GETNEXT).
+DEFAULT_SNMP_INTERVAL = 10
+MIN_SNMP_INTERVAL = 5
+MAX_SNMP_INTERVAL = 60

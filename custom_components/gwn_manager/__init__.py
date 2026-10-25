@@ -15,6 +15,7 @@ from homeassistant.loader import async_get_integration
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry, GWNCoordinator
 from .entity import async_get_device
+from .fast.manager import FastSources
 from .model_image import GWNModelImageView
 from .websocket import async_register_websocket
 
@@ -95,6 +96,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> bool:
     _update_via_devices()
     entry.async_on_unload(coordinator.async_add_listener(_update_via_devices))
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+
+    coordinator.fast_sources = FastSources(hass, entry, coordinator)
+    await coordinator.fast_sources.async_start()
+    entry.async_on_unload(coordinator.fast_sources.async_stop)
     return True
 
 

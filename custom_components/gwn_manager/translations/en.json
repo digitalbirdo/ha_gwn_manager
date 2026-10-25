@@ -211,5 +211,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "syslog_port_unavailable": {
+      "title": "Syslog port {port} unavailable",
+      "description": "GWN Manager could not listen for syslog messages on UDP port {port} ({error}). Fast updates via syslog are off; everything else keeps working. Choose another port in the integration's options and set the same port as syslog server port in GWN Manager."
+    }
   }
 }
