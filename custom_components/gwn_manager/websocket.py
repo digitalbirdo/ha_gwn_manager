@@ -244,7 +244,22 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
             }
         )
 
-    return {"entry_id": entry.entry_id, "title": entry.title, "aps": aps, "clients": clients}
+    fast = coordinator.fast_sources
+    sources = {
+        "api": {
+            "at": coordinator.last_api.isoformat() if coordinator.last_api else None,
+            "interval": coordinator.update_interval.total_seconds() if coordinator.update_interval else None,
+            "ok": coordinator.last_update_success,
+        },
+        **(fast.status() if fast else {}),
+    }
+    return {
+        "entry_id": entry.entry_id,
+        "title": entry.title,
+        "aps": aps,
+        "clients": clients,
+        "sources": sources,
+    }
 
 
 @websocket_api.websocket_command(

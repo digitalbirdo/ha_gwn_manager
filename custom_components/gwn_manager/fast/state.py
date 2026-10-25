@@ -18,6 +18,47 @@ from .syslog_parse import SyslogEvent
 _VALUE_KEYS = ("connected", "apId", "bssid", "rssi", "snr", "txRate", "channelClassStr")
 
 
+def band_from_channel(channel: int | None) -> str | None:
+    """Band of a Wi-Fi channel number, or None where it's ambiguous.
+
+    2.4 GHz uses 1-14, 5 GHz 36-144 in steps of 4 and 149-165, 6 GHz 1-233 in
+    steps of 4 starting at 1 – so 1, 5, 9, 13 and 149-165 can't be told apart.
+    """
+    if channel is None:
+        return None
+    if 1 <= channel <= 14:
+        return None if channel % 4 == 1 else "2.4G"
+    if 36 <= channel <= 144 and channel % 4 == 0:
+        return "5G"
+    if 17 <= channel <= 233 and channel % 4 == 1 and not 149 <= channel <= 165:
+        return "6G"
+    return None
+
+
+def learn_bands(
+    fast: FastState, base: dict[str, dict[str, Any]], overlay: dict[str, dict[str, Any]]
+) -> None:
+    """Learn BSSID -> band from clients the live API list shows with the same AP.
+
+    Skips records from the APs' own lists (up to one full update old) and
+    records whose channel contradicts their band.
+    """
+    for mac, entry in overlay.items():
+        client = base.get(mac)
+        if (
+            not client
+            or not client.get("connected")
+            or client.get("fromApList")
+            or not entry.get("bssid")
+            or not (band := client.get("channelClassStr"))
+            or (client.get("apId") or "").upper() != entry.get("apId")
+        ):
+            continue
+        if (from_channel := band_from_channel(client.get("channel"))) and from_channel != band:
+            continue
+        fast.learn_band(entry["bssid"], band)
+
+
 class FastState:
     """Client state from syslog and SNMP, keyed by upper-case MAC."""
 
@@ -54,6 +95,8 @@ class FastState:
             for key, value in (("rssi", event.rssi), ("txRate", event.rate), ("channel", event.channel)):
                 if value is not None:
                     new[key] = value
+            if band := band_from_channel(event.channel):
+                new["channelClassStr"] = band
         changed = entry is None or not entry["connected"] or entry.get("apId") != ap_mac
         self._entries[mac] = new
         self._syslog_at[mac] = now
@@ -75,8 +118,12 @@ class FastState:
             ):
                 # Syslog saw a newer connect elsewhere while this poll ran.
                 continue
+            carried = entry if entry and entry.get("apId") == ap_mac else {}
+            if carried.get("bssid") and carried["bssid"] != client.bssid:
+                # Another radio of the same AP: channel and band from before are stale.
+                carried = {k: v for k, v in carried.items() if k not in ("channel", "channelClassStr")}
             new = {
-                **(entry if entry and entry.get("apId") == ap_mac else {}),
+                **carried,
                 "connected": True,
                 "apId": ap_mac,
                 "bssid": client.bssid,

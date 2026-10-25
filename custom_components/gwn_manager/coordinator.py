@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import GWNAuthError, GWNClient, GWNError
 from .changes import ChangeTracker
-from .fast.state import FastState, apply_overlay
+from .fast.state import FastState, apply_overlay, learn_bands
 
 if TYPE_CHECKING:
     from .fast.manager import FastSources
@@ -47,6 +47,8 @@ type GWNConfigEntry = ConfigEntry[GWNCoordinator]
 # The live client list only counts the bytes of the current session; keep the
 # accumulated values of the full client list for these.
 HISTORIC_KEYS = {"txBytes", "rxBytes", "totalBytes"}
+# Band keys of the client lists in v2.0.0/ap/info -> channelClassStr of client/list
+AP_CLIENT_BANDS = {"2g4": "2.4G", "5g": "5G", "6g": "6G"}
 
 
 @dataclass
@@ -60,6 +62,9 @@ class GWNData:
     networks: dict[int, str | None] = field(default_factory=dict)
     # Keyed by "<network id>_<ssid id>".
     ssids: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Client MAC -> connection as the APs report it (v2.0.0/ap/info); filled by
+    # the full update.
+    ap_clients: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Connection events detected in this update: (MAC, event type, event data).
     events: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
 
@@ -162,12 +167,17 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         # Syslog/SNMP state, set up in __init__.py when the options enable them.
         self.fast: FastState | None = None
         self.fast_max_age = timedelta(seconds=30)
+        # Time of the last successful API poll, shown in the cards.
+        self.last_api: datetime | None = None
         self.fast_sources: FastSources | None = None
         # Last meaningful change per client, for the cards' flash.
         self.changes = ChangeTracker()
         # Wired clients seen connected since setup (MAC -> last record); the API
         # only lists wired clients while they are connected.
         self._wired: dict[str, dict[str, Any]] = {}
+        # Clients the APs list as connected but client/list leaves out (a GWN
+        # Manager bug); taken from the AP lists until the next full update.
+        self._ap_only: set[str] = set()
         # Router MAC -> (WAN rx bytes, WAN tx bytes, time) for the WAN throughput
         self._wan_samples: dict[str, tuple[int, int, datetime]] = {}
         # Router MAC -> (download bit/s, upload bit/s)
@@ -191,9 +201,11 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
 
     async def _fetch(self) -> GWNData:
         now = dt_util.utcnow()
+        full_fetched = False
         if self._full is None or now - self._full_fetched >= self._full_interval:
             self._full = await self._fetch_full()
             self._full_fetched = now
+            full_fetched = True
 
         data = GWNData(aps=self._full.aps, networks=self._full.networks, ssids=self._full.ssids)
         for mac, client in self._full.clients.items():
@@ -221,7 +233,10 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                 self._last_connected[mac] = now
                 self._update_throughput(mac, client, now)
 
+        self._apply_ap_clients(data, full_fetched, now)
+
         self._base = data
+        self.last_api = now
         return self._compose(now)
 
     def _compose(self, now: datetime) -> GWNData:
@@ -236,16 +251,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         )
         if self.fast is not None:
             overlay = self.fast.overlay(now, self.fast_max_age)
-            for mac, entry in overlay.items():
-                client = base.clients.get(mac)
-                if (
-                    client
-                    and client.get("connected")
-                    and entry.get("bssid")
-                    and client.get("channelClassStr")
-                    and (client.get("apId") or "").upper() == entry.get("apId")
-                ):
-                    self.fast.learn_band(entry["bssid"], client["channelClassStr"])
+            learn_bands(self.fast, base.clients, overlay)
             for mac in apply_overlay(data.clients, data.aps, overlay):
                 self._last_connected[mac] = now
 
@@ -271,6 +277,38 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             return
         self.data = self._compose(dt_util.utcnow())
         self.async_update_listeners()
+
+    def _apply_ap_clients(self, data: GWNData, full_fetched: bool, now: datetime) -> None:
+        """Add clients that only the APs' own client lists show as connected.
+
+        GWN Manager sometimes drops a connected client from client/list while
+        the AP still lists it (with the current AP and band). The AP lists are
+        only fetched with the full update, so only clients missing from
+        client/list right after that fetch count; a client that disconnects
+        later simply drops out of client/list and is not held back.
+        """
+        if full_fetched:
+            self._ap_only = {
+                mac
+                for mac in self._full.ap_clients
+                if not data.clients.get(mac, {}).get("connected")
+            }
+        for mac in list(self._ap_only):
+            client = data.clients.get(mac)
+            if client and client.get("connected"):
+                # Back in client/list, which has the fresher values.
+                self._ap_only.discard(mac)
+                continue
+            ap_client = self._full.ap_clients[mac]
+            merged = data.clients.setdefault(
+                mac, {"clientId": mac, "timeZone": data.networks.get(ap_client["networkId"])}
+            )
+            merged.update(ap_client)
+            # Up to one full update old: not trusted for learning BSSID bands.
+            merged["fromApList"] = True
+            merged["connected"] = True
+            merged["wired"] = 2
+            self._last_connected[mac] = now
 
     def _detect_device_uplinks(self, data: GWNData) -> None:
         """Guess which switch port each AP and the router are plugged into.
@@ -595,6 +633,20 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                     _LOGGER.debug("No details for %s: %s", mac, detail)
                     detail = {}
                 ap["details"] = detail
+                for ssid_entry in detail.get("ssid") or []:
+                    for ssid_name, bands in ssid_entry.items():
+                        for band, stations in (bands or {}).items():
+                            for station in stations or []:
+                                if not (client_mac := normalize_mac(station.get("clientMac"))):
+                                    continue
+                                data.ap_clients[client_mac] = {
+                                    "apId": mac,
+                                    "apName": ap.get("name"),
+                                    "ssid": ssid_name,
+                                    "channelClassStr": AP_CLIENT_BANDS.get(band, band),
+                                    "rssi": station.get("rssi"),
+                                    "networkId": network_id,
+                                }
             await self._fetch_device_extras(network_id, network_aps)
             data.aps.update(network_aps)
 

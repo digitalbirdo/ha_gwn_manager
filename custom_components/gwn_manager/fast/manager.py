@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 import contextlib
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -65,6 +65,9 @@ class FastSources:
         self.syslog_by_device: Counter[str] = Counter()
         self.snmp_errors: Counter[str] = Counter()
         self.last_syslog: str | None = None
+        # Last SNMP round with at least one answering device, and its result.
+        self.last_snmp: datetime | None = None
+        self.snmp_ok = 0
 
     @property
     def enabled(self) -> bool:
@@ -177,6 +180,7 @@ class FastSources:
         pollers = list(self._pollers.items())
         results = await asyncio.gather(*(p.poll() for _, p in pollers), return_exceptions=True)
         changed = False
+        ok = 0
         for (device, _), result in zip(pollers, results, strict=True):
             if isinstance(result, SnmpUnavailable):
                 if not self.snmp_errors[device]:
@@ -186,10 +190,14 @@ class FastSources:
             if isinstance(result, BaseException):
                 _LOGGER.error("SNMP poll of %s failed: %r", device, result)
                 continue
+            ok += 1
             if self.coordinator.fast and self.coordinator.fast.apply_snmp(
                 device, result, dt_util.utcnow(), started
             ):
                 changed = True
+        self.snmp_ok = ok
+        if ok:
+            self.last_snmp = dt_util.utcnow()
         if changed:
             self._schedule_update()
 
@@ -211,6 +219,25 @@ class FastSources:
                 self._undetected.pop(mac, None)
             else:
                 self._undetected[mac] = now
+
+    def status(self) -> dict[str, Any]:
+        """What the cards show: is each source on, and when did it last deliver."""
+        last_line = self._transport.get_protocol().last_line if self._transport else None
+        return {
+            "syslog": {
+                "enabled": self.syslog_enabled,
+                "listening": self._transport is not None,
+                "at": dt_util.utc_from_timestamp(last_line).isoformat() if last_line else None,
+                "event_at": self.last_syslog,
+            },
+            "snmp": {
+                "enabled": self.snmp_enabled,
+                "at": self.last_snmp.isoformat() if self.last_snmp else None,
+                "ok": self.snmp_ok,
+                "total": len(self._pollers),
+                "interval": self.interval,
+            },
+        }
 
     def diagnostics(self) -> dict[str, Any]:
         return {

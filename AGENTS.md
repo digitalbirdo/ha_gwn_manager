@@ -77,6 +77,9 @@ Docs: https://doc.grandstream.dev/GWN-API/EN/ – they are incomplete; these wer
 - Timestamps without offset (`lastSeen`) are in the network's time zone (`network/detail`).
 - `subscribe/*` push only supports BLE clients and alerts – no client connection push.
 - Undocumented `app/*` endpoints (web UI, username/password) are deliberately not used.
+- GWN Manager sometimes leaves connected clients out of `client/list` (seen with new private MACs
+  after an SSID security change). `v2.0.0/ap/info` still lists them per SSID and band; the coordinator
+  adds those clients until the next full update (`_apply_ap_clients`, marked `fromApList`).
 
 ## Fast sources (`fast/`): syslog and SNMP from the devices
 
@@ -95,7 +98,10 @@ expire after `fast_max_age`, then the API wins again. `async_fast_update()` publ
   GETNEXT with several OIDs return wrong data. ~0.25 s per client and column, so only the needed
   columns are walked. Detection via `…42397.1.1.2` (AP) / `…42397.1.2.1` (router).
   The SNMP engine must be built in an executor (`build_engine`, MIB loading blocks).
-- Band of an AP BSSID isn't in SNMP; it's learned from clients the API lists with the same AP.
+- Band of an AP BSSID isn't in SNMP; it's learned from clients the live API list shows with the same
+  AP (`learn_bands`, never from AP-list records, which can be 90 s old), or derived from an unambiguous
+  channel (`band_from_channel`).
+- The cards show per source (API, SNMP, Syslog) the age of the last data (`networks[].sources`).
 - Unit tests for the pure parts: `pip install -r requirements_test.txt && pytest tests`.
 
 ## Local test instance

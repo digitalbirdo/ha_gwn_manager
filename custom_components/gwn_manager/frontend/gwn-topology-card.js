@@ -22,7 +22,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.6.0";
+const TOPOLOGY_VERSION = "0.6.1";
 const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
 const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
@@ -92,6 +92,51 @@ function formatDuration(seconds) {
   return d ? `${d}d ${h}h` : `${h}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
+// Data sources (API, SNMP, Syslog): coloured dot + age of the last data, ticking every second.
+// Yellow once the age is well beyond the source's normal rhythm, grey when off or nothing arrived.
+function sourcesHtml(sources) {
+  if (!sources) return "";
+  const item = (key, label, src, limit, extra = "") => {
+    if (!src) return "";
+    const off = src.enabled === false;
+    return `<span class="src" data-src="${key}" data-at="${off ? "" : src.at ?? ""}" data-limit="${limit}"
+      data-off="${off ? 1 : ""}" title="${label}${extra ? ` – ${extra}` : ""}"><i></i>${label} <em></em></span>`;
+  };
+  const api = sources.api;
+  const snmp = sources.snmp;
+  return [
+    item("api", "API", api, Math.max(30, (api?.interval || 10) * 3)),
+    item("snmp", "SNMP", snmp, Math.max(60, ((snmp?.interval || 10) + 20) * 2),
+      snmp && snmp.enabled ? `${snmp.ok}/${snmp.total}` : ""),
+    item("syslog", "Syslog", sources.syslog, 60),
+  ].join("");
+}
+
+function tickSources(root) {
+  const now = Date.now();
+  for (const el of root.querySelectorAll(".src")) {
+    const at = el.dataset.at ? Date.parse(el.dataset.at) : NaN;
+    let state = "off";
+    let text = el.dataset.off ? "off" : "–";
+    if (!el.dataset.off && !Number.isNaN(at)) {
+      const age = Math.max(0, Math.round((now - at) / 1000));
+      text = age < 90 ? `${age} s` : age < 5400 ? `${Math.round(age / 60)} min` : `${Math.round(age / 3600)} h`;
+      state = age <= Number(el.dataset.limit) ? "ok" : "stale";
+    }
+    const extra = el.title.includes("–") ? ` ${el.title.split("– ")[1]}` : "";
+    el.querySelector("em").textContent = text + (state === "ok" || state === "stale" ? extra : "");
+    el.dataset.state = state;
+  }
+}
+
+const SOURCES_CSS = `
+  .src { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .src i { width: 7px; height: 7px; border-radius: 50%; background: #9e9e9e; }
+  .src[data-state="ok"] i { background: #3ee08f; box-shadow: 0 0 5px #3ee08f; }
+  .src[data-state="stale"] i { background: #f5c542; box-shadow: 0 0 5px #f5c542; }
+  .src em { font-style: normal; font-variant-numeric: tabular-nums; opacity: .8; }
+`;
+
 // Change highlight: duration of the flash, and how long a client that left stays greyed out.
 const FLASH_MS = 1500;
 const LINGER_MS = 5000;
@@ -128,6 +173,12 @@ class GwnTopologyCard extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     this._applyAppearance();
+    const sourcesBox = this.shadowRoot.querySelector(".sources");
+    if (sourcesBox) tickSources(sourcesBox);
+    this._sourceTimer ??= setInterval(() => {
+      const el = this.shadowRoot?.querySelector(".sources");
+      if (el) tickSources(el);
+    }, 1000);
     if (first && this.isConnected) this._subscribe();
   }
 
@@ -151,6 +202,10 @@ class GwnTopologyCard extends HTMLElement {
     this._unsubscribe();
     this._resizeObserver?.disconnect();
     clearInterval(this._watchdog);
+    clearInterval(this._sourceTimer);
+    this._sourceTimer = null;
+    clearTimeout(this._flashTimer);
+    clearTimeout(this._lingerTimer);
   }
 
   _t(key) {
@@ -564,6 +619,7 @@ class GwnTopologyCard extends HTMLElement {
             <div>
               <div class="eyebrow">${esc(this._t("topology"))}</div>
               <div class="title">${esc(this._config.title ?? net?.title ?? "GWN")}</div>
+              <div class="sources">${sourcesHtml(net?.sources)}</div>
             </div>
             <div class="chips">${chips}${net ? `
               <button class="chip toggle ${this._expandAll ? "on" : ""}" data-expand aria-pressed="${this._expandAll}">
@@ -998,6 +1054,9 @@ const STYLE = `
   .client-row {
     display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer;
   }
+  .sources { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .sources:empty { display: none; }
+  ${SOURCES_CSS}
   .client-row:hover { background: rgba(56, 198, 232, .08); }
   .client-row.flash { animation: gwn-row-flash 1.5s ease-out 1; }
   .client-row.gone { opacity: .4; }

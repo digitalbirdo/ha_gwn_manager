@@ -120,3 +120,47 @@ def test_apply_overlay_disconnect_of_unknown_client_is_ignored():
     clients: dict = {}
     assert apply_overlay(clients, {}, {PHONE: {"connected": False, "apId": AP_A}}) == set()
     assert clients == {}
+
+
+def test_band_from_channel_only_when_unambiguous():
+    from fast.state import band_from_channel
+
+    assert [band_from_channel(c) for c in (6, 11, 36, 44, 64, 140, 37, 93, 1, 5, 149, 165, None)] == [
+        "2.4G", "2.4G", "5G", "5G", "5G", "5G", "6G", "6G", None, None, None, None, None]
+
+
+def test_debug_channel_sets_band():
+    s = FastState()
+    s.apply_syslog(AP_A, SyslogEvent("connected", PHONE, channel=37, debug=True), at(0))
+    assert s.overlay(at(1), AGE)[PHONE]["channelClassStr"] == "6G"
+
+
+def test_new_bssid_drops_stale_channel():
+    s = FastState()
+    s.apply_syslog(AP_A, SyslogEvent("connected", PHONE, channel=44, debug=True), at(0))
+    s.apply_snmp(AP_A, snmp(bssid="EC:74:D7:00:00:A1"), at(5), started=at(3))
+    s.apply_snmp(AP_A, snmp(bssid="EC:74:D7:00:00:A2"), at(20), started=at(18))
+    o = s.overlay(at(21), AGE)[PHONE]
+    assert "channel" not in o and "channelClassStr" not in o
+
+
+def test_learn_bands_skips_ap_list_and_inconsistent_records():
+    from fast.state import learn_bands
+
+    s = FastState()
+    overlay = {PHONE: {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:AA"},
+               "AA:00:00:00:00:02": {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:BB"},
+               "AA:00:00:00:00:03": {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:CC"}}
+    base = {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "2.4G", "fromApList": True},
+            "AA:00:00:00:00:02": {"connected": True, "apId": AP_A, "channelClassStr": "2.4G", "channel": 44},
+            "AA:00:00:00:00:03": {"connected": True, "apId": AP_A, "channelClassStr": "5G", "channel": 44}}
+    learn_bands(s, base, overlay)
+    assert s._bands == {"EC:74:D7:00:00:CC": "5G"}
+
+
+def test_overlay_band_replaces_stale_api_band():
+    from fast.state import apply_overlay
+
+    clients = {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "2.4G"}}
+    apply_overlay(clients, {}, {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "5G"}})
+    assert clients[PHONE]["channelClassStr"] == "5G"

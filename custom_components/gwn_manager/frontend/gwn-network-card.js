@@ -21,7 +21,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -33,6 +33,51 @@ const ALPHA_MIN = 0.04;
 const RESUBSCRIBE_AFTER_MS = 90_000;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Data sources (API, SNMP, Syslog): coloured dot + age of the last data, ticking every second.
+// Yellow once the age is well beyond the source's normal rhythm, grey when off or nothing arrived.
+function sourcesHtml(sources) {
+  if (!sources) return "";
+  const item = (key, label, src, limit, extra = "") => {
+    if (!src) return "";
+    const off = src.enabled === false;
+    return `<span class="src" data-src="${key}" data-at="${off ? "" : src.at ?? ""}" data-limit="${limit}"
+      data-off="${off ? 1 : ""}" title="${label}${extra ? ` – ${extra}` : ""}"><i></i>${label} <em></em></span>`;
+  };
+  const api = sources.api;
+  const snmp = sources.snmp;
+  return [
+    item("api", "API", api, Math.max(30, (api?.interval || 10) * 3)),
+    item("snmp", "SNMP", snmp, Math.max(60, ((snmp?.interval || 10) + 20) * 2),
+      snmp && snmp.enabled ? `${snmp.ok}/${snmp.total}` : ""),
+    item("syslog", "Syslog", sources.syslog, 60),
+  ].join("");
+}
+
+function tickSources(root) {
+  const now = Date.now();
+  for (const el of root.querySelectorAll(".src")) {
+    const at = el.dataset.at ? Date.parse(el.dataset.at) : NaN;
+    let state = "off";
+    let text = el.dataset.off ? "off" : "–";
+    if (!el.dataset.off && !Number.isNaN(at)) {
+      const age = Math.max(0, Math.round((now - at) / 1000));
+      text = age < 90 ? `${age} s` : age < 5400 ? `${Math.round(age / 60)} min` : `${Math.round(age / 3600)} h`;
+      state = age <= Number(el.dataset.limit) ? "ok" : "stale";
+    }
+    const extra = el.title.includes("–") ? ` ${el.title.split("– ")[1]}` : "";
+    el.querySelector("em").textContent = text + (state === "ok" || state === "stale" ? extra : "");
+    el.dataset.state = state;
+  }
+}
+
+const SOURCES_CSS = `
+  .src { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .src i { width: 7px; height: 7px; border-radius: 50%; background: #9e9e9e; }
+  .src[data-state="ok"] i { background: #3ee08f; box-shadow: 0 0 5px #3ee08f; }
+  .src[data-state="stale"] i { background: #f5c542; box-shadow: 0 0 5px #f5c542; }
+  .src em { font-style: normal; font-variant-numeric: tabular-nums; opacity: .8; }
+`;
 
 // Change highlight: duration of the flash, and how long a client that left stays greyed out.
 const FLASH_MS = 1500;
@@ -146,6 +191,10 @@ class GwnNetworkCard extends HTMLElement {
   disconnectedCallback() {
     this._unsubscribe();
     cancelAnimationFrame(this._frame);
+    clearInterval(this._sourceTimer);
+    this._sourceTimer = null;
+    clearTimeout(this._flashTimer);
+    clearTimeout(this._lingerTimer);
     this._frame = null;
     this._resizeObserver?.disconnect();
   }
@@ -161,11 +210,23 @@ class GwnNetworkCard extends HTMLElement {
         this._lastMessage = Date.now();
         this._error(null);
         this._update(data.networks);
+        this._updateSources(data.networks);
       }, msg);
       this._lastMessage = Date.now();
     } catch (err) {
       this._error(err.message || String(err));
     }
+  }
+
+  _updateSources(networks) {
+    const box = this.shadowRoot?.querySelector(".chip.sources");
+    if (!box) return;
+    box.innerHTML = sourcesHtml(networks?.[0]?.sources);
+    tickSources(box);
+    this._sourceTimer ??= setInterval(() => {
+      const el = this.shadowRoot?.querySelector(".chip.sources");
+      if (el) tickSources(el);
+    }, 1000);
   }
 
   /** Whether a client's change is new to this card (flash) and if a leaver should still be shown. */
@@ -539,6 +600,9 @@ class GwnNetworkCard extends HTMLElement {
           margin-right: 5px; background: var(--c); box-shadow: 0 0 6px var(--c); vertical-align: 0;
         }
         .modes { right: 12px; padding: 2px; gap: 2px; }
+        .chip.sources { top: 10px; bottom: auto; right: 12px; gap: 10px; padding: 3px 10px; pointer-events: auto; }
+        .chip.sources:empty { display: none; }
+        ${SOURCES_CSS}
         .modes button {
           border: 0; background: transparent; color: var(--gwn-muted); border-radius: 999px;
           font-size: 11px; padding: 4px 12px; cursor: pointer; transition: background .2s, color .2s;
@@ -590,6 +654,7 @@ class GwnNetworkCard extends HTMLElement {
             </g>
           </svg>
           <div class="tooltip"></div>
+          <div class="chip sources"></div>
           <div class="chip legend"></div>
           <div class="chip modes">
             <button data-mode="rssi">Signal</button>
