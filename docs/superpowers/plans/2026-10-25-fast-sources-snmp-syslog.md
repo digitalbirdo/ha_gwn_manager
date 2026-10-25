@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Both fast sources are **off by default**; options: `fast_snmp` (bool), `snmp_community` (str, default `public`), `snmp_interval` (s, default 5, min 3, max 60), `fast_syslog` (bool), `syslog_port` (int, default 5514, 1–65535), `syslog_debug_events` (bool, default off: also evaluate the debug-level `gseventlog` JSON), `card_flash` (card option, default on).
+- Both fast sources are **off by default**; options: `fast_snmp` (bool), `snmp_community` (str, default `public`), `snmp_interval` (s, default 10, min 5, max 60), `fast_syslog` (bool), `syslog_port` (int, default 5514, 1–65535), `syslog_debug_events` (bool, default off: also evaluate the debug-level `gseventlog` JSON), `card_flash` (card option, default on).
 - Debug-level JSON (only sent when the GWN syslog level is debug, ~4× the traffic): `controller: process_send_events: gseventlog send {json}`; `event_subtype` 0 = disconnected (`client_mac`, `ap_mac`, `ssid`, `frequency band`), 1 = connected (+ `channel`, `rssi` dBm, `tx_rate`, `rx_rate`, `new_sta_mode`), 21 = client info (`hostname`, `os`, `ipv4`). MACs without colons. RSSI comes only at connect time, not continuously – continuous signal stays with SNMP.
 - SNMPv3 is out of scope for this plan (v2c only); note it in "Open ideas".
 - AP MIB (GWN76xx): client table `1.3.6.1.4.1.42397.1.1.3.3.1`; columns: 2 = MAC (`aa:bb:..`), 3 = IP, 4 = BSSID, 5 = SSID, 6 = SNR (dB), 9 = hostname, 11 = rate (Mbit/s).

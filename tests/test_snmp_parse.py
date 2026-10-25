@@ -4,8 +4,9 @@ from fast.snmp_parse import COLUMNS, MibVariant, build_clients
 
 
 def test_columns_match_mibs():
-    assert COLUMNS[MibVariant.AP] == {"mac": 2, "ip": 3, "bssid": 4, "ssid": 5, "signal": 6, "hostname": 9, "rate": 11}
-    assert COLUMNS[MibVariant.ROUTER] == {"mac": 2, "bssid": 3, "ip": 4, "band": 6, "ssid": 7, "signal": 8, "hostname": 11}
+    # Only what the API doesn't refresh fast enough: every column costs one walk.
+    assert COLUMNS[MibVariant.AP] == {"mac": 2, "bssid": 4, "signal": 6, "rate": 11}
+    assert COLUMNS[MibVariant.ROUTER] == {"mac": 2, "bssid": 3, "band": 6, "signal": 8}
 
 
 def test_ap_rows_snr_to_rssi():

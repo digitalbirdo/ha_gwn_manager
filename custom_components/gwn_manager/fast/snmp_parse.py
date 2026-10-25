@@ -26,9 +26,11 @@ TABLES = {
     MibVariant.AP: "1.3.6.1.4.1.42397.1.1.3.3.1",
     MibVariant.ROUTER: "1.3.6.1.4.1.42397.1.2.1.3.1",
 }
+# Only the columns the API doesn't refresh fast enough: every column is one
+# walk of ~0.25 s per client (IP column 3/4, SSID 5/7, hostname 9/11 exist too).
 COLUMNS: dict[MibVariant, dict[str, int]] = {
-    MibVariant.AP: {"mac": 2, "ip": 3, "bssid": 4, "ssid": 5, "signal": 6, "hostname": 9, "rate": 11},
-    MibVariant.ROUTER: {"mac": 2, "bssid": 3, "ip": 4, "band": 6, "ssid": 7, "signal": 8, "hostname": 11},
+    MibVariant.AP: {"mac": 2, "bssid": 4, "signal": 6, "rate": 11},
+    MibVariant.ROUTER: {"mac": 2, "bssid": 3, "band": 6, "signal": 8},
 }
 ROUTER_BANDS = {"2.4GHZ": "2.4G", "5GHZ": "5G", "6GHZ": "6G"}
 
