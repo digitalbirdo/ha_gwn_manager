@@ -171,6 +171,12 @@ can't read.
 - Unit tests with `pytest-homeassistant-custom-component` and a mocked API.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
 - README screenshot of the card with sample data.
+- Change indication in the topology card, only for meaningful events (not every RSSI/rate update,
+  those change for almost all clients every ~90 s): client connected (briefly highlighted),
+  disconnected (stays greyed out for a few seconds; the card re-renders fully, so it has to keep
+  removed clients), roamed (highlighted at the new AP, greyed at the old one), AP/port/internet
+  status changes, signal only when it crosses a colour step. Reuse the coordinator's connect/
+  disconnect/roam detection. Estimated about half a day.
 
 The maintainer may keep a local, git-ignored `LIVING_DOCUMENT.md` with private project notes;
 if it exists, read it first and keep it up to date.
