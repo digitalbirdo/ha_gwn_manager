@@ -28,8 +28,10 @@ custom_components/gwn_manager/
   model_image.py    /gwn_manager/model/<model>.png: proxies the product pictures of the GWN Manager
   logbook.py        Logbook texts for the client events
   diagnostics.py    Diagnostics with redaction
+  fast/             Optional fast sources: syslog listener, SNMP pollers, overlay state
   frontend/gwn-network-card.js   Network map card (plain web component, no build step)
   translations/en.json, de.json
+tests/              pytest for the pure fast-source modules
 scripts/            Dev instance, onboarding, adding the integration, card screenshots
 scripts/demo/       Demo GWN API server with made-up data, README screenshots
 docs/screenshots/   README screenshots (demo data only)
@@ -75,6 +77,26 @@ Docs: https://doc.grandstream.dev/GWN-API/EN/ – they are incomplete; these wer
 - Timestamps without offset (`lastSeen`) are in the network's time zone (`network/detail`).
 - `subscribe/*` push only supports BLE clients and alerts – no client connection push.
 - Undocumented `app/*` endpoints (web UI, username/password) are deliberately not used.
+
+## Fast sources (`fast/`): syslog and SNMP from the devices
+
+Optional (options `fast_syslog`, `fast_snmp`); `fast/manager.py` runs them, `fast/state.py` keeps
+what they report and is laid over the API data in `GWNCoordinator._compose()`. Overlay entries
+expire after `fast_max_age`, then the API wins again. `async_fast_update()` publishes without
+`async_set_updated_data` (that would restart the poll timer and starve the API polling).
+
+- Syslog (`fast/syslog_parse.py`): hostapd `<if>: AP-STA-CONNECTED/DISCONNECTED <mac>` and
+  `Sta is freed: sta=…, bssid=…` (level notice); `gseventlog send {json}` (subtype 0/1, plus client
+  info) only at level debug. Sender → device by source IP, else the MAC tag `GWNxxxx[<mac12>]`.
+  ~40 lines/s at notice, ~150/s at debug – keep the substring pre-filter cheap.
+- SNMP v2c (`fast/snmp.py`): enterprise 42397. APs (GWN76xx) client table `…42397.1.1.3.3.1`
+  (2 MAC, 4 BSSID, 6 SNR dB, 11 rate), routers (GWN70xx) `…42397.1.2.1.3.1` (2 MAC without colons,
+  3 BSSID, 6 band, 8 RSSI dBm). Only single-OID GETNEXT works: GETBULK times out, GET by index and
+  GETNEXT with several OIDs return wrong data. ~0.25 s per client and column, so only the needed
+  columns are walked. Detection via `…42397.1.1.2` (AP) / `…42397.1.2.1` (router).
+  The SNMP engine must be built in an executor (`build_engine`, MIB loading blocks).
+- Band of an AP BSSID isn't in SNMP; it's learned from clients the API lists with the same AP.
+- Unit tests for the pure parts: `pip install -r requirements_test.txt && pytest tests`.
 
 ## Local test instance
 
@@ -211,7 +233,9 @@ coordinates and keys, but check with `grep` for your own values before committin
   doesn't. So discovery could only offer "GWN devices found – set up GWN Manager?" (manifest
   `zeroconf` + `async_step_zeroconf`, abort if an entry exists); URL, App ID and secret stay manual.
   About an hour; mainly helps new users find the integration.
-- Unit tests with `pytest-homeassistant-custom-component` and a mocked API.
+- Unit tests for the HA parts with `pytest-homeassistant-custom-component` and a mocked API
+  (the pure fast-source modules already have tests in `tests/`).
+- SNMPv3 for the fast sources (USM user, auth/priv), for networks that turned v2c off.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
 - Change indication in the topology card, only for meaningful events (not every RSSI/rate update,
   those change for almost all clients every ~90 s): client connected (briefly highlighted),

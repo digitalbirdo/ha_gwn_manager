@@ -139,6 +139,26 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - **Manual assignments**: one line per client, `client = device` or `client = device:port` (names or MACs),
   e.g. for devices behind an AP's LAN port, which GWN Manager attributes to the router
 - **Track offline clients**: create entities for all clients known to GWN Manager, not only for currently connected ones
+- **Fast updates via syslog / SNMP** (default off), see below
+
+### Fast updates (syslog and SNMP)
+
+GWN Manager passes on signal strength and link rates only about every 90 s. With these options the
+integration also reads the devices directly; everything else still comes from the API, and a device
+that doesn't answer simply stays on the API.
+
+- **Syslog**: connects, disconnects and roaming show up within about a second. In GWN Manager set the
+  syslog server to the Home Assistant host, UDP port **5514** (option *Syslog port*) and level
+  **notice**. *Use debug events* additionally evaluates the detailed connect events (signal, rate,
+  channel) that the devices only send at level debug – about four times as many messages.
+- **SNMP**: signal (dBm), link rate and BSSID of every Wi-Fi client, every *SNMP interval* (default
+  10 s) plus the poll itself, which takes about 10–15 s for a few APs. Enable SNMP v2c in GWN Manager
+  and enter its read community (default `public`). Access points (GWN76xx) and routers (GWN70xx) are
+  detected automatically; access points report the signal-to-noise ratio, which is converted with a
+  noise floor of −95 dBm.
+- The GWN API can't switch syslog or SNMP on – do it in GWN Manager. If the syslog port can't be
+  opened, a repair issue says so and the integration keeps running without syslog.
+- Diagnostics (`fast_sources`) show per device whether SNMP was detected and how many syslog events arrived.
 
 ## API notes
 
