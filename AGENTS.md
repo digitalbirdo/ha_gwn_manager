@@ -154,9 +154,12 @@ flaky – call the card's methods via `page.evaluate` instead (e.g. `_showToolti
 
 ## Release
 
-1. Bump `version` in `custom_components/gwn_manager/manifest.json`.
+1. Bump `version` in `custom_components/gwn_manager/manifest.json` and the version constants of
+   both cards (`VERSION` in `gwn-network-card.js`, `TOPOLOGY_VERSION` in `gwn-topology-card.js`).
 2. Commit and push to `main`; wait for the **Validate** workflow (hassfest + HACS) to pass.
-3. `gh release create vX.Y.Z --target main --title … --notes …`.
+3. `gh release create vX.Y.Z --target main --title "vX.Y.Z – <short summary>" --notes …`.
+   Always give the title a short summary after the version: HACS shows the release title in its
+   version list, a bare version number tells users nothing.
 4. Users update through HACS and restart Home Assistant.
 
 HACS installs from the tagged sources. Don't switch to `zip_release`: GitHub's
