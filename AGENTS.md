@@ -257,6 +257,11 @@ coordinates and keys, but check with `grep` for your own values before committin
   cards. Tested: browsing found 32 named devices in 6 s; reverse PTR queries ("who is this IP") are
   hardly answered, so don't rely on them. Doesn't help clients that announce nothing (VMs, private-MAC
   phones, simple IoT devices).
+- Consistency between fast and slow fields: when a client's BSSID changes (SNMP/syslog), the
+  Wi-Fi mode from the API (`staMode`, e.g. "Wi-Fi 6, 80 MHz") is up to 90 s old and can contradict
+  the new band (6 GHz → "Wi-Fi 6E"). Hide or mark `staMode` until the API confirms the new band. Same
+  for the RX rate of clients with an SNMP TX rate: hide the old API value instead of showing a fast TX
+  next to a stale RX.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
 
 The maintainer may keep a local, git-ignored `LIVING_DOCUMENT.md` with private project notes;

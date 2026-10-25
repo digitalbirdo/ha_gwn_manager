@@ -164,6 +164,40 @@ that doesn't answer simply stays on the API.
   opened, a repair issue says so and the integration keeps running without syslog.
 - Diagnostics (`fast_sources`) show per device whether SNMP was detected and how many syslog events arrived.
 
+### How the data sources combine
+
+The API data is built first; syslog and SNMP are laid over it while their values are fresh
+(30 s with syslog only, about 75 s with SNMP at a 10 s interval). If a fast source goes quiet,
+the API values apply again, so nothing gets stuck.
+
+```mermaid
+flowchart TB
+    subgraph API["GWN Manager API"]
+        direction TB
+        full["All known clients<br/>(every 90 s, incl. offline)"]
+        aplist["Access points' own client lists<br/>(every 90 s, for clients<br/>missing in the live list)"]
+        live["Connected clients<br/>(every 10 s)"]
+        full --> aplist --> live
+    end
+    subgraph FAST["Fast sources (optional, override the API while fresh)"]
+        direction TB
+        syslog["Syslog<br/>connected / disconnected, AP, BSSID<br/>(debug: signal, rate, channel)"]
+        snmp["SNMP<br/>AP, BSSID, signal, SNR, TX rate"]
+        bssid["device/info: BSSID → band, channel, SSID"]
+        snmp --> bssid
+        syslog --> bssid
+    end
+    live --> merge(("Client in<br/>Home Assistant"))
+    bssid --> merge
+```
+
+| Field | Source while fresh | Otherwise |
+|---|---|---|
+| Connected, access point, BSSID | Syslog, SNMP | API |
+| Signal, TX rate | SNMP (continuous), syslog debug (at connect) | API |
+| Band, channel, SSID | `device/info` by BSSID | API |
+| IP, name, OS, RX rate, Wi-Fi mode, VLAN, last seen, traffic | – | API only |
+
 ## API notes
 
 - Uses the GWN open API (`/oapi/v1.0.0`), see the [API documentation](https://doc.grandstream.dev/GWN-API/EN/).
