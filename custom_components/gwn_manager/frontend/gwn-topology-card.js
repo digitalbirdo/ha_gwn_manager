@@ -19,9 +19,10 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.7";
+const TOPOLOGY_VERSION = "0.5.8";
 const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
+const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
 const EXPAND_KEY = "gwn-topology-card:expanded";
 const WIRE_COLORS = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa"];
 
@@ -33,7 +34,7 @@ const TEXT = {
     unknown: "Unknown", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "active ports", uplinkUnknown: "Uplink unknown", noData: "Waiting for data…",
     port: "Port", wired: "Wired", tapHint: "Tap a device to show its connections",
-    noClients: "No clients connected", details: "Details", copy: "Copy", copied: "Copied",
+    noClients: "No clients connected", details: "Details", copy: "Copy", copied: "Copied", ssids: "SSIDs", hidden: "hidden",
     radios: "Radios", band: "Band", channel: "Ch", width: "Width", txPower: "Power", load: "Load",
     widthHint: "Width: widest one a client uses",
   },
@@ -44,7 +45,7 @@ const TEXT = {
     unknown: "Unbekannt", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "aktive Ports", uplinkUnknown: "Uplink unbekannt", noData: "Warte auf Daten …",
     port: "Port", wired: "Kabel", tapHint: "Gerät antippen, um Verbindungen zu zeigen",
-    noClients: "Keine Clients verbunden", details: "Details", copy: "Kopieren", copied: "Kopiert",
+    noClients: "Keine Clients verbunden", details: "Details", copy: "Kopieren", copied: "Kopiert", ssids: "SSIDs", hidden: "versteckt",
     radios: "Funk", band: "Band", channel: "Ch", width: "Breite", txPower: "Leistung", load: "Auslastung",
     widthHint: "Breite: die breiteste, die ein Client nutzt",
   },
@@ -293,24 +294,56 @@ class GwnTopologyCard extends HTMLElement {
       }
       return parts.join(" · ");
     };
+    // Clients without a name are named by their MAC; the front is just the
+    // vendor prefix, so show the distinguishing end ("…FD:55:17").
+    const shortName = (name) => (MAC_NAME.test(name || "") ? `…${name.slice(-8)}` : name);
+    const clientRow = (c) => `
+      <div class="client-row" data-client-entity="${esc(c.entity_id ?? "")}">
+        <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
+        <span class="cbody">
+          <span class="cline"><span class="cname" title="${esc(c.name)}">${esc(shortName(c.name))}</span>${c.ip
+            ? `<button class="ip" data-copy="${esc(c.ip)}" title="${esc(this._t("copy"))}">${esc(c.ip)}</button>` : ""}${c.rssi != null && !c.wired
+            ? `<span class="rssi" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
+          <span class="cmeta">${clientMeta(c)}</span>
+        </span>
+      </div>`;
+    const groupHead = (name, count, bands = [], hidden = false) => `
+      <div class="ssid ${count ? "" : "idle"}">
+        <span class="sname">${esc(name)}${hidden ? ` <small>(${esc(this._t("hidden"))})</small>` : ""}</span>
+        <span class="sbands">${bands.map((b) => `<b class="b${esc(b)}">${esc(b.replace("G", ""))}</b>`).join("")}</span>
+        <span class="scount" title="${esc(this._t("clients"))}">${esc(count)}</span>
+      </div>`;
+    // Clients grouped by SSID in the order the device lists its SSIDs (also
+    // the ones without clients), then other SSIDs, then wired clients.
     const clientList = (device) => {
       if (!this._expandAll && this._selected !== device.mac) return "";
       const list = clients
         .filter((c) => c.connected && c.ap === device.mac)
-        .sort((a, b) => Number(a.wired) - Number(b.wired) || (b.rssi ?? -999) - (a.rssi ?? -999));
-      const rows = list.length
-        ? list.map((c) => `
-          <div class="client-row" data-client-entity="${esc(c.entity_id ?? "")}">
-            <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
-            <span class="cbody">
-              <span class="cline"><span class="cname">${esc(c.name)}</span>${c.ip
-                ? `<button class="ip" data-copy="${esc(c.ip)}" title="${esc(this._t("copy"))}">${esc(c.ip)}</button>` : ""}${c.rssi != null && !c.wired
-                ? `<span class="rssi" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
-              <span class="cmeta">${clientMeta(c)}</span>
-            </span>
-          </div>`).join("")
-        : `<div class="empty-list">${esc(this._t("noClients"))}</div>`;
-      return `<div class="client-list">${radioTable(device)}${rows}</div>`;
+        .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+      const groups = (device.ssids || []).map((x) => ({ ...x, items: [] }));
+      const wired = [];
+      for (const c of list) {
+        if (c.wired) {
+          wired.push(c);
+          continue;
+        }
+        const name = c.ssid || "?";
+        let group = groups.find((g) => g.name === name);
+        if (!group) groups.push((group = { name, bands: [], hidden: false, items: [] }));
+        group.items.push(c);
+      }
+      if (wired.length) groups.push({ name: this._t("wired"), bands: [], hidden: false, items: wired });
+      const body = groups.length
+        ? groups.map((g) => `
+            <div class="ssid-group">
+              ${groupHead(g.name, g.items.length, g.bands, g.hidden)}
+              ${g.items.map(clientRow).join("")}
+            </div>`).join("")
+        : "";
+      // Same width for all IPs of the list, so they line up left-aligned.
+      const ipChars = Math.max(0, ...list.map((c) => (c.ip || "").length));
+      return `<div class="client-list" style="--ip-chars:${ipChars}">${radioTable(device)}${body}${
+        list.length ? "" : `<div class="empty-list">${esc(this._t("noClients"))}</div>`}</div>`;
     };
     // Product picture from the GWN Manager; pictures that failed to load stay off.
     const image = (device) =>
@@ -753,6 +786,7 @@ const STYLE = `
   .client-row .ip {
     border: 0; background: transparent; padding: 1px 4px; margin: 0; border-radius: 4px; cursor: copy;
     font: inherit; font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+    text-align: left; flex: none; width: calc(var(--ip-chars, 15) * 1ch + 8px);
   }
   .client-row .ip:hover { color: var(--accent); background: rgba(56, 198, 232, .1); }
   .client-row .ip.copied { color: var(--ok); }
@@ -773,6 +807,21 @@ const STYLE = `
     display: inline-block; width: 22px; height: 5px; border-radius: 3px; margin-right: 5px; vertical-align: middle;
     background: linear-gradient(90deg, var(--accent) var(--load), var(--line) var(--load));
   }
+  .ssid-group + .ssid-group { margin-top: 6px; }
+  .ssid {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 11px; font-weight: 600;
+    border-radius: 6px; background: rgba(56, 198, 232, .07);
+  }
+  .ssid .sname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ssid .sname small { color: var(--muted); }
+  .ssid .sbands { display: inline-flex; gap: 3px; }
+  .ssid .sbands b {
+    font-size: 9.5px; font-weight: 600; padding: 0 4px; border-radius: 4px; line-height: 15px;
+    border: 1px solid var(--card-border); color: var(--muted);
+  }
+  .ssid .sbands b.b5G, .ssid .sbands b.b6G { color: var(--ok); }
+  .ssid .scount { min-width: 18px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ssid.idle .scount, .ssid.idle .sname { color: var(--muted); }
   .radios .hint { color: var(--muted); font-size: 10px; margin-top: 4px; }
   .empty-list { color: var(--muted); font-size: 12px; text-align: center; }
   .wrap.compact .stage { padding-left: 24px; gap: 22px; }

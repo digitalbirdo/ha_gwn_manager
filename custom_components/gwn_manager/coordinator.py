@@ -85,6 +85,18 @@ def parse_manual_uplinks(text: str | None) -> list[tuple[str, str, str | None]]:
     return result
 
 
+def is_wired(client: dict[str, Any]) -> bool:
+    """Whether a client is connected by cable.
+
+    The "wired" flag of the API isn't reliable: GWN Manager also reports
+    clients of an AP's Wi-Fi with wired=1 at times. Wi-Fi clients always
+    have an SSID, a signal or a band.
+    """
+    return not (
+        client.get("ssid") or client.get("rssi") is not None or client.get("channelClassStr")
+    )
+
+
 def normalize_mac(mac: str | None) -> str:
     """Return "AA:BB:CC:DD:EE:FF" for MACs with or without separators."""
     raw = (mac or "").replace(":", "").replace("-", "").upper()
@@ -189,7 +201,9 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                     }
                 )
                 merged["connected"] = True
-                if client.get("wired") == 1:
+                # From here on "wired" is 1 for cable and 2 for Wi-Fi, see is_wired().
+                merged["wired"] = 1 if is_wired(client) else 2
+                if merged["wired"] == 1:
                     self._wired[mac] = {**merged}
                 self._last_connected[mac] = now
                 self._update_throughput(mac, client, now)
@@ -547,5 +561,5 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             # All known clients, including offline ones, without live values.
             for client in await self.client.get_clients(network_id, connected_only=False):
                 if mac := (client.get("clientId") or "").upper():
-                    data.clients[mac] = {**client, "timeZone": time_zone}
+                    data.clients[mac] = {**client, "timeZone": time_zone, "wired": 2}
         return data

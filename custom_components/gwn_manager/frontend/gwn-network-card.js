@@ -20,7 +20,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.5.7";
+const VERSION = "0.5.8";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -964,6 +964,7 @@ class GwnNetworkCard extends HTMLElement {
         ${(d.radios || []).map((r) => `${escapeHtml(r.band.replace("G", " GHz"))}: ${this._t("channel")} ${escapeHtml(r.channel)}${
           r.width ? ` · ${escapeHtml(r.width)} MHz` : ""}${r.power != null ? ` · ${escapeHtml(r.power)} dBm` : ""}${
           r.load != null ? ` · ${escapeHtml(r.load)} %` : ""}<br>`).join("")}
+        ${(d.ssids || []).length ? `<span class="muted">${(d.ssids || []).map((x) => `${escapeHtml(x.name)} (${escapeHtml(x.clients)})`).join(" · ")}</span><br>` : ""}
         <span class="muted">${escapeHtml(d.ip ?? "")}</span>`;
     } else {
       const ap = d.ap ? this._nodes.get(`ap:${d.ap}`)?.data?.name : null;

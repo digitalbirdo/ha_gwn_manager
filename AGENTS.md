@@ -63,6 +63,8 @@ Docs: https://doc.grandstream.dev/GWN-API/EN/ – they are incomplete; these wer
 - `v2.0.0/ap/info` accepts a MAC list but only answers for the first MAC.
   Some models report nonsense (CPU `192224%`, memory `0 MB`) – values are sanity-checked.
 - `upgrade/version` returns MACs without colons (`normalize_mac`).
+- The client `wired` flag is unreliable: GWN Manager sometimes reports Wi-Fi clients of an AP with
+  `wired: 1`. The coordinator derives it from SSID/RSSI/band instead (`is_wired`).
 - The channel width of a radio can't be read (`ap_*_width` exists only in `ap/config/edit`).
   Each live client has it in `staMode`, e.g. `11AXA_HE80` = Wi-Fi 6 at 80 MHz (HT/VHT/HE/EHT = Wi-Fi 4/5/6/7).
 - Product pictures: `/img/topo/main_icon/<model>.png`, no login (GWN Manager and GWN.Cloud);

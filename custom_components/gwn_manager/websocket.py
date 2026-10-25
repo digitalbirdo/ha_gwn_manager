@@ -96,6 +96,29 @@ def _radios(ap: dict[str, Any], widths: dict[str, int]) -> list[dict[str, Any]]:
     return radios
 
 
+SSID_BANDS = {"2": "2.4G", "5": "5G", "6": "6G"}
+
+
+def _ssids(
+    ap: dict[str, Any], configs: dict[str, dict[str, Any]], clients: dict[str, int]
+) -> list[dict[str, Any]]:
+    """SSIDs an access point broadcasts, with their bands and connected clients."""
+    result = []
+    for item in (ap.get("details") or {}).get("ssid") or []:
+        for name in item if isinstance(item, dict) else ():
+            config = configs.get(name, {})
+            bands = str(config.get("ssidNewSsidBand") or config.get("ssidSsidBand") or "")
+            result.append(
+                {
+                    "name": name,
+                    "bands": [SSID_BANDS[b] for b in bands.split(",") if b in SSID_BANDS],
+                    "hidden": config.get("ssidSsidHidden") == 1,
+                    "clients": clients.get(name, 0),
+                }
+            )
+    return result
+
+
 @callback
 def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
     """Build the network map of one config entry."""
@@ -114,6 +137,11 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
 
     bands: dict[str, dict[str, int]] = {}
     widths: dict[str, dict[str, int]] = {}
+    ssid_clients: dict[str, dict[str, int]] = {}
+    ssid_configs = {
+        ssid.get("ssidName"): ssid.get("configuration") or {}
+        for ssid in coordinator.data.ssids.values()
+    }
     for client in coordinator.data.clients.values():
         if (
             client.get("connected")
@@ -122,6 +150,9 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
         ):
             band = client.get("channelClassStr") or "?"
             bands.setdefault(ap_mac, {})[band] = bands.setdefault(ap_mac, {}).get(band, 0) + 1
+            if ssid := client.get("ssid"):
+                per_ap = ssid_clients.setdefault(ap_mac, {})
+                per_ap[ssid] = per_ap.get(ssid, 0) + 1
             if width := _sta_mode(client)[1]:
                 ap_widths = widths.setdefault(ap_mac, {})
                 ap_widths[band] = max(width, ap_widths.get(band, 0))
@@ -152,6 +183,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "firmware": ap.get("versionFirmware"),
                 "bands": bands.get(mac, {}),
                 "radios": _radios(ap, widths.get(mac, {})),
+                "ssids": _ssids(ap, ssid_configs, ssid_clients.get(mac, {})),
                 "ports": _ports(ap),
                 "wan": ap.get("wan"),
                 # Physical uplink {parent, port, ownPort, source}, detected or manual
