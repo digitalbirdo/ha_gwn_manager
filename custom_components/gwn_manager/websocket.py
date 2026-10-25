@@ -218,6 +218,7 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
         device_id, user_name, _ = device_info(mac)
         connected = bool(client.get("connected"))
         generation, width = _sta_mode(client) if connected else (None, None)
+        change, changed_at = coordinator.changes.changes.get(mac, (None, None))
         clients.append(
             {
                 "mac": mac,
@@ -238,6 +239,8 @@ def _topology(hass: HomeAssistant, entry: GWNConfigEntry) -> dict[str, Any]:
                 "device_id": device_id,
                 "entity_id": ent_reg.async_get_entity_id("device_tracker", DOMAIN, mac),
                 "signal_entity": ent_reg.async_get_entity_id("sensor", DOMAIN, f"{mac}_rssi"),
+                "change": change,
+                "changed_at": changed_at.isoformat() if changed_at else None,
             }
         )
 

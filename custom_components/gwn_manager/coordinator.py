@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import GWNAuthError, GWNClient, GWNError
+from .changes import ChangeTracker
 from .fast.state import FastState, apply_overlay
 
 if TYPE_CHECKING:
@@ -162,6 +163,8 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self.fast: FastState | None = None
         self.fast_max_age = timedelta(seconds=30)
         self.fast_sources: FastSources | None = None
+        # Last meaningful change per client, for the cards' flash.
+        self.changes = ChangeTracker()
         # Wired clients seen connected since setup (MAC -> last record); the API
         # only lists wired clients while they are connected.
         self._wired: dict[str, dict[str, Any]] = {}
@@ -254,6 +257,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._detect_device_uplinks(data)
         self._apply_manual_uplinks(data)
         self._detect_events(data)
+        self.changes.update(data.clients, now)
         return data
 
     @callback

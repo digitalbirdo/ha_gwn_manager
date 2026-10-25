@@ -13,6 +13,7 @@
  *   animate: true            # gentle floating of the bubbles
  *   color_by: rssi           # rssi or band; can also be switched on the card
  *   show_rssi: true          # signal strength (dBm) on the client links; toggle with "dBm"
+ *   card_flash: true         # briefly highlight clients that connected, roamed, left or changed signal step
  *   appearance: auto         # auto (follows HA dark mode), dark or light
  *   device_images: true      # product pictures in the device bubbles (loaded from the GWN Manager)
  *   layout: auto             # floors (APs arranged by the floor of their area), free, or auto
@@ -32,6 +33,10 @@ const ALPHA_MIN = 0.04;
 const RESUBSCRIBE_AFTER_MS = 90_000;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Change highlight: duration of the flash, and how long a client that left stays greyed out.
+const FLASH_MS = 1500;
+const LINGER_MS = 5000;
 
 function rssiColor(rssi) {
   if (rssi === null || rssi === undefined) return "var(--disabled-text-color, #9e9e9e)";
@@ -101,6 +106,7 @@ class GwnNetworkCard extends HTMLElement {
       appearance: "auto",
       layout: "auto",
       device_images: true,
+      card_flash: true,
       ...config,
     };
     this._colorBy = this._config.color_by === "band" ? "band" : "rssi";
@@ -162,6 +168,25 @@ class GwnNetworkCard extends HTMLElement {
     }
   }
 
+  /** Whether a client's change is new to this card (flash) and if a leaver should still be shown. */
+  _flashState(client) {
+    this._seenChanges ??= new Map();
+    const known = this._seenChanges.has(client.mac);
+    const previous = this._seenChanges.get(client.mac);
+    this._seenChanges.set(client.mac, client.changed_at ?? null);
+    if (!this._config.card_flash || !client.changed_at) return { start: false, lingering: false };
+    // Nothing flashes for what happened before the card got its first data.
+    const start = known ? previous !== client.changed_at : this._flashReady === true;
+    const age = Date.now() - Date.parse(client.changed_at);
+    const lingering =
+      client.change === "disconnected" && age < LINGER_MS && (start || this._nodes.has(`cl:${client.mac}`));
+    if (lingering) {
+      clearTimeout(this._lingerTimer);
+      this._lingerTimer = setTimeout(() => this._lastNetworks && this._update(this._lastNetworks), LINGER_MS - age + 50);
+    }
+    return { start, lingering };
+  }
+
   _unsubscribe() {
     if (this._unsub) {
       this._unsub().catch?.(() => {});
@@ -170,6 +195,7 @@ class GwnNetworkCard extends HTMLElement {
   }
 
   _update(networks) {
+    this._lastNetworks = networks;
     const seen = new Set();
     const links = [];
     const center = { x: this._width / 2, y: this._config.height / 2 };
@@ -213,10 +239,13 @@ class GwnNetworkCard extends HTMLElement {
         });
       }
       for (const client of net.clients) {
-        if (!client.connected && !this._config.show_offline) continue;
+        const flash = this._flashState(client);
+        // Clients that just left stay greyed out for a moment before they disappear.
+        if (!client.connected && !this._config.show_offline && !flash.lingering) continue;
         const apNode = client.connected && client.ap ? this._nodes.get(`ap:${client.ap}`) : null;
         const parent = apNode || root;
         const node = upsert(`cl:${client.mac}`, "client", client, parent);
+        if (flash.start) node.flashUntil = Date.now() + FLASH_MS;
         links.push({
           source: parent,
           target: node,
@@ -237,6 +266,7 @@ class GwnNetworkCard extends HTMLElement {
       }
     }
     this._links = links;
+    this._flashReady = true;
     this._syncElements();
   }
 
@@ -454,6 +484,14 @@ class GwnNetworkCard extends HTMLElement {
         .node.ap circle.body { fill: url(#gwn-ap); }
         .node.ap.offline circle.body { fill: url(#gwn-offline); }
         .node.client.offline circle.body { opacity: .4; }
+        .node.client.flash circle.body { animation: gwn-flash ${FLASH_MS}ms ease-out 1; }
+        @keyframes gwn-flash {
+          0% { stroke: var(--accent-color, #38c6e8); stroke-width: 12; stroke-opacity: .25; }
+          100% { stroke-width: 1.5; stroke-opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .node.client.flash circle.body { animation: none; stroke: var(--accent-color, #38c6e8); stroke-width: 3; }
+        }
         .node circle.pulse {
           fill: none; stroke: #4fc3ff; stroke-width: 2; opacity: 0; pointer-events: none;
           transform-box: fill-box; transform-origin: center;
@@ -687,7 +725,12 @@ class GwnNetworkCard extends HTMLElement {
       }
       const d = node.data;
       const offline = node.type === "ap" ? !d.online : node.type === "client" && !d.connected;
-      el.setAttribute("class", `node ${node.type}${offline ? " offline" : ""}`);
+      const flashing = node.flashUntil > Date.now();
+      el.setAttribute("class", `node ${node.type}${offline ? " offline" : ""}${flashing ? " flash" : ""}`);
+      if (flashing) {
+        clearTimeout(this._flashTimer);
+        this._flashTimer = setTimeout(() => this._syncElements(), FLASH_MS + 50);
+      }
       const circle = el.querySelector(".body");
       const label = el.querySelector(".label");
       let r = RADIUS[node.type];

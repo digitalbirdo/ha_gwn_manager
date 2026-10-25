@@ -14,6 +14,7 @@
  *   graphs: true             # history graphs: internet, channel load, client signal
  *   history_hours: 24        # time span of the graphs
  *   device_images: true      # product pictures of the devices (loaded from the GWN Manager)
+ *   card_flash: true         # briefly highlight clients that connected, roamed, left or changed signal step
  *   uplinks:                 # which port each device is plugged into (the API doesn't tell)
  *     Living Room AP: Switch:17   # "<device>:<port>", or just the port if there is one switch
  *     Office AP: 21
@@ -91,6 +92,10 @@ function formatDuration(seconds) {
   return d ? `${d}d ${h}h` : `${h}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
+// Change highlight: duration of the flash, and how long a client that left stays greyed out.
+const FLASH_MS = 1500;
+const LINGER_MS = 5000;
+
 class GwnTopologyCard extends HTMLElement {
   constructor() {
     super();
@@ -107,7 +112,7 @@ class GwnTopologyCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { appearance: "auto", show_all_ports: false, device_images: true, expanded: false, graphs: true, history_hours: 24, uplinks: {}, ...config };
+    this._config = { appearance: "auto", show_all_ports: false, device_images: true, card_flash: true, expanded: false, graphs: true, history_hours: 24, uplinks: {}, ...config };
     // The button state is remembered per browser, the option is the default.
     let stored = null;
     try {
@@ -155,6 +160,30 @@ class GwnTopologyCard extends HTMLElement {
 
   // ---------------------------------------------------------------- data
 
+  /** Mark clients whose change is new to this card; nothing flashes for the first data. */
+  _trackChanges(networks) {
+    this._seenChanges ??= new Map();
+    this._flashUntil ??= new Map();
+    const now = Date.now();
+    let next = Infinity;
+    for (const c of networks?.[0]?.clients || []) {
+      const known = this._seenChanges.has(c.mac);
+      const previous = this._seenChanges.get(c.mac);
+      this._seenChanges.set(c.mac, c.changed_at ?? null);
+      if (!this._config.card_flash || !c.changed_at) continue;
+      if (known ? previous !== c.changed_at : this._flashReady) {
+        this._flashUntil.set(c.mac, now + (c.change === "disconnected" ? LINGER_MS : FLASH_MS));
+      }
+    }
+    this._flashReady = true;
+    for (const [mac, until] of this._flashUntil) {
+      if (until <= now) this._flashUntil.delete(mac);
+      else next = Math.min(next, until);
+    }
+    clearTimeout(this._flashTimer);
+    if (next !== Infinity) this._flashTimer = setTimeout(() => this._trackChanges(this._networks) || this._render(), next - now + 50);
+  }
+
   async _subscribe() {
     this._unsubscribe();
     this._lastMessage = Date.now();
@@ -164,6 +193,7 @@ class GwnTopologyCard extends HTMLElement {
       this._unsub = await this._hass.connection.subscribeMessage((data) => {
         this._lastMessage = Date.now();
         this._networks = data.networks;
+        this._trackChanges(data.networks);
         this._render();
       }, msg);
     } catch (err) {
@@ -373,8 +403,9 @@ class GwnTopologyCard extends HTMLElement {
     // Clients without a name are named by their MAC; the front is just the
     // vendor prefix, so show the distinguishing end ("…FD:55:17").
     const shortName = (name) => (MAC_NAME.test(name || "") ? `…${name.slice(-8)}` : name);
+    const flashing = (c) => (this._flashUntil?.get(c.mac) ?? 0) > Date.now();
     const clientRow = (c) => `
-      <div class="client-row" data-device="${esc(c.device_id ?? "")}" data-client-entity="${esc(c.entity_id ?? "")}">
+      <div class="client-row${flashing(c) ? (c.connected ? " flash" : " gone") : ""}" data-device="${esc(c.device_id ?? "")}" data-client-entity="${esc(c.entity_id ?? "")}">
         <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
         <span class="cbody">
           <span class="cline"><span class="cname" title="${esc(c.name)}">${esc(shortName(c.name))}</span>${c.ip
@@ -395,7 +426,8 @@ class GwnTopologyCard extends HTMLElement {
     const clientList = (device) => {
       if (!this._expandAll && this._selected !== device.mac) return "";
       const list = clients
-        .filter((c) => c.connected && c.ap === device.mac)
+        // Clients that just left stay greyed out for a moment.
+        .filter((c) => (c.connected || (c.change === "disconnected" && flashing(c))) && c.ap === device.mac)
         .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
       const groups = (device.ssids || []).map((x) => ({ ...x, items: [] }));
       const wired = [];
@@ -967,6 +999,12 @@ const STYLE = `
     display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer;
   }
   .client-row:hover { background: rgba(56, 198, 232, .08); }
+  .client-row.flash { animation: gwn-row-flash 1.5s ease-out 1; }
+  .client-row.gone { opacity: .4; }
+  @keyframes gwn-row-flash { from { background: rgba(56, 198, 232, .25); } to { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) {
+    .client-row.flash { animation: none; outline: 1px solid var(--accent); outline-offset: -1px; }
+  }
   .client-row i { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: flex-start; margin-top: 5px; }
   .client-row .cbody { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .client-row .cline { display: flex; gap: 8px; align-items: baseline; }
