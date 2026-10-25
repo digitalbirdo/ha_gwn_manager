@@ -16,12 +16,14 @@ from homeassistant.const import CONF_SCAN_INTERVAL, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .api import GWNAuthError, GWNClient, GWNError
 from .changes import ChangeTracker
-from .fast.state import FastState, apply_overlay, learn_bands
+from .cleanup import is_stale
+from .fast.state import FastState, apply_overlay, bssid_table
 
 if TYPE_CHECKING:
     from .fast.manager import FastSources
@@ -30,8 +32,10 @@ from .const import (
     CONF_APP_SECRET,
     CONF_MANUAL_UPLINKS,
     CONF_PRESENCE_INTERVAL,
+    CONF_REMOVE_AFTER_DAYS,
     CONF_SERVER_URL,
     DEFAULT_PRESENCE_INTERVAL,
+    DEFAULT_REMOVE_AFTER_DAYS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     EVENT_CLIENT_CONNECTED,
@@ -170,6 +174,12 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         # Time of the last successful API poll, shown in the cards.
         self.last_api: datetime | None = None
         self.fast_sources: FastSources | None = None
+        # Clients removed from Home Assistant (manually or as stale); they get
+        # no entities until they connect again. Persisted per config entry.
+        self.removed: set[str] = set()
+        self._removed_store: Store[list[str]] = Store(
+            hass, 1, f"{DOMAIN}.{entry.entry_id}.removed_clients"
+        )
         # Last meaningful change per client, for the cards' flash.
         self.changes = ChangeTracker()
         # Wired clients seen connected since setup (MAC -> last record); the API
@@ -237,9 +247,9 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
 
         self._base = data
         self.last_api = now
-        return self._compose(now)
+        return self._compose(now, full_fetched)
 
-    def _compose(self, now: datetime) -> GWNData:
+    def _compose(self, now: datetime, full_fetched: bool = False) -> GWNData:
         """API snapshot plus the fast sources, with the derived values."""
         base = self._base
         assert base is not None
@@ -250,8 +260,9 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             clients={mac: dict(client) for mac, client in base.clients.items()},
         )
         if self.fast is not None:
+            if full_fetched or not self.fast.has_bssids:
+                self.fast.set_bssids(bssid_table(base.aps))
             overlay = self.fast.overlay(now, self.fast_max_age)
-            learn_bands(self.fast, base.clients, overlay)
             for mac in apply_overlay(data.clients, data.aps, overlay):
                 self._last_connected[mac] = now
 
@@ -264,7 +275,37 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._apply_manual_uplinks(data)
         self._detect_events(data)
         self.changes.update(data.clients, now)
+        self._readd_removed(data)
         return data
+
+    async def async_load_removed(self) -> None:
+        self.removed = set(await self._removed_store.async_load() or [])
+
+    @callback
+    def async_mark_removed(self, macs: set[str]) -> None:
+        """Remember clients whose device was removed from Home Assistant."""
+        if macs - self.removed:
+            self.removed |= macs
+            self._removed_store.async_delay_save(lambda: sorted(self.removed), 5)
+
+    def is_stale(self, mac: str, client: dict[str, Any], now: datetime) -> bool:
+        """Not connected for longer than the "remove after" option."""
+        days = self.config_entry.options.get(CONF_REMOVE_AFTER_DAYS, DEFAULT_REMOVE_AFTER_DAYS)
+        return is_stale(
+            bool(client.get("connected")),
+            parse_timestamp(client.get("lastSeen"), client.get("timeZone")),
+            self._last_connected.get(mac),
+            now,
+            days,
+        )
+
+    def _readd_removed(self, data: GWNData) -> None:
+        """A removed client connected again: forget the removal and reload to add it."""
+        back = {mac for mac in self.removed if data.clients.get(mac, {}).get("connected")}
+        if back:
+            self.removed -= back
+            self._removed_store.async_delay_save(lambda: sorted(self.removed), 5)
+            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
 
     @callback
     def async_fast_update(self) -> None:
@@ -304,8 +345,6 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                 mac, {"clientId": mac, "timeZone": data.networks.get(ap_client["networkId"])}
             )
             merged.update(ap_client)
-            # Up to one full update old: not trusted for learning BSSID bands.
-            merged["fromApList"] = True
             merged["connected"] = True
             merged["wired"] = 2
             self._last_connected[mac] = now

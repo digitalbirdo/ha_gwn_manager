@@ -65,13 +65,6 @@ def test_stale_snmp_poll_does_not_undo_newer_roam():
     assert s.overlay(at(13), AGE)[PHONE]["apId"] == AP_B
 
 
-def test_band_learned_from_bssid():
-    s = FastState()
-    s.learn_band("EC:74:D7:00:00:AB", "6G")
-    s.apply_snmp(AP_A, snmp(), at(5), started=at(3))
-    assert s.overlay(at(6), AGE)[PHONE]["channelClassStr"] == "6G"
-
-
 def test_router_snmp_band_used_directly():
     s = FastState()
     c = SnmpClient(PHONE, "EC:74:D7:00:00:01", None, None, -22, None, None, "2.4G", None)
@@ -144,23 +137,48 @@ def test_new_bssid_drops_stale_channel():
     assert "channel" not in o and "channelClassStr" not in o
 
 
-def test_learn_bands_skips_ap_list_and_inconsistent_records():
-    from fast.state import learn_bands
-
-    s = FastState()
-    overlay = {PHONE: {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:AA"},
-               "AA:00:00:00:00:02": {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:BB"},
-               "AA:00:00:00:00:03": {"connected": True, "apId": AP_A, "bssid": "EC:74:D7:00:00:CC"}}
-    base = {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "2.4G", "fromApList": True},
-            "AA:00:00:00:00:02": {"connected": True, "apId": AP_A, "channelClassStr": "2.4G", "channel": 44},
-            "AA:00:00:00:00:03": {"connected": True, "apId": AP_A, "channelClassStr": "5G", "channel": 44}}
-    learn_bands(s, base, overlay)
-    assert s._bands == {"EC:74:D7:00:00:CC": "5G"}
-
-
 def test_overlay_band_replaces_stale_api_band():
     from fast.state import apply_overlay
 
     clients = {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "2.4G"}}
     apply_overlay(clients, {}, {PHONE: {"connected": True, "apId": AP_A, "channelClassStr": "5G"}})
     assert clients[PHONE]["channelClassStr"] == "5G"
+
+
+AP_INFO = {
+    AP_A: {"info": {"radioFrequencyInfo": {
+        "radioFrequency6g": {"ssids": ["Home"], "bssid6gs": ["ec:74:d7:00:00:ab"], "channel": "21"},
+        "radioFrequency5g": {"ssids": ["Home", "Guest"], "bssid5gs": ["ec:74:d7:00:00:aa", "f2:74:d7:00:00:aa"], "channel": "48"},
+        "radioFrequency2_4g": {"ssids": ["IoT", "Home"], "bssid2_4gs": ["ec:74:d7:00:00:a9"], "channel": ""},
+    }}},
+    "SWITCH": {"info": {}},
+}
+
+
+def test_bssid_table_from_device_info():
+    from fast.state import bssid_table
+
+    t = bssid_table(AP_INFO)
+    assert t["EC:74:D7:00:00:AB"] == {"channelClassStr": "6G", "channel": 21, "ssid": "Home"}
+    assert t["F2:74:D7:00:00:AA"] == {"channelClassStr": "5G", "channel": 48, "ssid": "Guest"}
+    # SSID list doesn't line up with the BSSIDs, channel empty: only the band is certain
+    assert t["EC:74:D7:00:00:A9"] == {"channelClassStr": "2.4G"}
+
+
+def test_snmp_takes_band_channel_ssid_from_bssid_table():
+    from fast.state import bssid_table
+
+    s = FastState()
+    s.set_bssids(bssid_table(AP_INFO))
+    s.apply_snmp(AP_A, snmp(bssid="EC:74:D7:00:00:AB"), at(5), started=at(3))
+    o = s.overlay(at(6), AGE)[PHONE]
+    assert (o["channelClassStr"], o["channel"], o["ssid"]) == ("6G", 21, "Home")
+    s.apply_snmp(AP_A, snmp(bssid="EC:74:D7:00:00:AA"), at(20), started=at(18))
+    o = s.overlay(at(21), AGE)[PHONE]
+    assert (o["channelClassStr"], o["channel"]) == ("5G", 48)
+
+
+def test_unknown_bssid_leaves_band_open():
+    s = FastState()
+    s.apply_snmp(AP_A, snmp(bssid="EC:74:D7:00:00:EE"), at(5), started=at(3))
+    assert "channelClassStr" not in s.overlay(at(6), AGE)[PHONE]

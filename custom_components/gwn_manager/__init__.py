@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry, GWNCoordinator
@@ -83,6 +84,7 @@ async def _async_register_cards(hass: HomeAssistant, version: str) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> bool:
     """Set up GWN Manager from a config entry."""
     coordinator = GWNCoordinator(hass, entry)
+    await coordinator.async_load_removed()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
@@ -95,6 +97,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> bool:
     # The platforms have created all devices by now.
     _update_via_devices()
     entry.async_on_unload(coordinator.async_add_listener(_update_via_devices))
+
+    @callback
+    def _remove_stale_clients() -> None:
+        _async_remove_stale_clients(hass, coordinator)
+
+    _remove_stale_clients()
+    entry.async_on_unload(coordinator.async_add_listener(_remove_stale_clients))
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     coordinator.fast_sources = FastSources(hass, entry, coordinator)
@@ -132,16 +141,39 @@ async def _async_reload_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+@callback
+def _async_remove_stale_clients(hass: HomeAssistant, coordinator: GWNCoordinator) -> None:
+    """Remove the devices of clients not connected for longer than the option allows."""
+    now = dt_util.utcnow()
+    stale = {
+        mac
+        for mac, client in coordinator.data.clients.items()
+        if mac not in coordinator.removed and coordinator.is_stale(mac, client, now)
+    }
+    if not stale:
+        return
+    dev_reg = dr.async_get(hass)
+    entry_id = coordinator.config_entry.entry_id
+    for mac in stale:
+        if device := async_get_device(hass, entry_id, mac):
+            dev_reg.async_update_device(device.id, remove_config_entry_id=entry_id)
+    coordinator.async_mark_removed(stale)
+
+
 async def async_remove_config_entry_device(
     hass: HomeAssistant, entry: GWNConfigEntry, device: dr.DeviceEntry
 ) -> bool:
-    """Allow removing devices that the GWN Manager no longer reports."""
-    data = entry.runtime_data.data
-    current = {
-        *data.clients,
-        *data.aps,
-        *(f"ssid_{entry.entry_id}_{key}" for key in data.ssids),
-    }
-    return not any(
-        identifier[0] == DOMAIN and identifier[1] in current for identifier in device.identifiers
-    )
+    """Allow removing devices: clients that aren't connected, anything no longer reported.
+
+    A removed client gets no entities again until it connects again.
+    """
+    coordinator = entry.runtime_data
+    data = coordinator.data
+    macs = {identifier[1] for identifier in device.identifiers if identifier[0] == DOMAIN}
+    if any(data.clients.get(mac, {}).get("connected") for mac in macs):
+        return False
+    ssids = {f"ssid_{entry.entry_id}_{key}" for key in data.ssids}
+    if any(mac in data.aps or mac in ssids for mac in macs):
+        return False
+    coordinator.async_mark_removed({mac for mac in macs if mac in data.clients} or macs)
+    return True

@@ -38,11 +38,13 @@ from .const import (
     DEFAULT_PRESENCE_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     CONF_FAST_SNMP,
+    CONF_REMOVE_AFTER_DAYS,
     CONF_FAST_SYSLOG,
     CONF_SNMP_COMMUNITY,
     CONF_SNMP_INTERVAL,
     CONF_SYSLOG_DEBUG_EVENTS,
     CONF_SYSLOG_PORT,
+    DEFAULT_REMOVE_AFTER_DAYS,
     DEFAULT_SERVER_URL,
     DEFAULT_SNMP_COMMUNITY,
     DEFAULT_SNMP_INTERVAL,
@@ -215,6 +217,17 @@ class GWNOptionsFlow(OptionsFlow):
                     vol.Optional(
                         CONF_MANUAL_UPLINKS, default=options.get(CONF_MANUAL_UPLINKS, "")
                     ): TextSelector(TextSelectorConfig(multiline=True)),
+                    vol.Required(
+                        CONF_REMOVE_AFTER_DAYS,
+                        default=options.get(CONF_REMOVE_AFTER_DAYS, DEFAULT_REMOVE_AFTER_DAYS),
+                    ): vol.All(
+                        NumberSelector(
+                            NumberSelectorConfig(
+                                min=0, max=3650, unit_of_measurement="d", mode=NumberSelectorMode.BOX
+                            )
+                        ),
+                        vol.Coerce(int),
+                    ),
                     vol.Required(
                         CONF_FAST_SYSLOG, default=options.get(CONF_FAST_SYSLOG, False)
                     ): bool,

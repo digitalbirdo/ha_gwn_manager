@@ -51,3 +51,7 @@ DEFAULT_SNMP_COMMUNITY = "public"
 DEFAULT_SNMP_INTERVAL = 10
 MIN_SNMP_INTERVAL = 5
 MAX_SNMP_INTERVAL = 60
+
+# Remove clients (devices + entities) after this many days without a connection; 0 = never.
+CONF_REMOVE_AFTER_DAYS = "remove_after_days"
+DEFAULT_REMOVE_AFTER_DAYS = 0

@@ -11,11 +11,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from .snmp_parse import SnmpClient
+from .snmp_parse import SnmpClient, normalize_mac
 from .syslog_parse import SyslogEvent
 
 # Keys compared to tell whether an SNMP poll changed anything.
-_VALUE_KEYS = ("connected", "apId", "bssid", "rssi", "snr", "txRate", "channelClassStr")
+_VALUE_KEYS = ("connected", "apId", "bssid", "rssi", "snr", "txRate", "channelClassStr", "channel")
 
 
 def band_from_channel(channel: int | None) -> str | None:
@@ -35,28 +35,40 @@ def band_from_channel(channel: int | None) -> str | None:
     return None
 
 
-def learn_bands(
-    fast: FastState, base: dict[str, dict[str, Any]], overlay: dict[str, dict[str, Any]]
-) -> None:
-    """Learn BSSID -> band from clients the live API list shows with the same AP.
+_RADIO_BANDS = {
+    "radioFrequency2_4g": ("bssid2_4gs", "2.4G"),
+    "radioFrequency5g": ("bssid5gs", "5G"),
+    "radioFrequency6g": ("bssid6gs", "6G"),
+}
 
-    Skips records from the APs' own lists (up to one full update old) and
-    records whose channel contradicts their band.
+
+def bssid_table(aps: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """BSSID -> band, channel and SSID, from the devices' device/info.
+
+    Each radio lists its BSSIDs and SSIDs in the same order; when the lists
+    don't line up, only band and channel are certain.
     """
-    for mac, entry in overlay.items():
-        client = base.get(mac)
-        if (
-            not client
-            or not client.get("connected")
-            or client.get("fromApList")
-            or not entry.get("bssid")
-            or not (band := client.get("channelClassStr"))
-            or (client.get("apId") or "").upper() != entry.get("apId")
-        ):
-            continue
-        if (from_channel := band_from_channel(client.get("channel"))) and from_channel != band:
-            continue
-        fast.learn_band(entry["bssid"], band)
+    table: dict[str, dict[str, Any]] = {}
+    for ap in aps.values():
+        radios = (ap.get("info") or {}).get("radioFrequencyInfo") or {}
+        for key, (bssid_key, band) in _RADIO_BANDS.items():
+            radio = radios.get(key) or {}
+            bssids = radio.get(bssid_key) or []
+            ssids = radio.get("ssids") or []
+            try:
+                channel = int(radio.get("channel"))
+            except (TypeError, ValueError):
+                channel = None
+            for i, raw in enumerate(bssids):
+                if not (bssid := normalize_mac(raw)):
+                    continue
+                entry: dict[str, Any] = {"channelClassStr": band}
+                if channel:
+                    entry["channel"] = channel
+                if len(ssids) == len(bssids) and ssids[i]:
+                    entry["ssid"] = ssids[i]
+                table[bssid] = entry
+    return table
 
 
 class FastState:
@@ -66,11 +78,15 @@ class FastState:
         self._entries: dict[str, dict[str, Any]] = {}
         # Time of the last syslog connect/disconnect per client.
         self._syslog_at: dict[str, datetime] = {}
-        self._bands: dict[str, str] = {}
+        self._bssids: dict[str, dict[str, Any]] = {}
 
-    def learn_band(self, bssid: str, band: str) -> None:
-        """Remember the band of a BSSID (from a client the API lists with both)."""
-        self._bands[bssid.upper()] = band
+    @property
+    def has_bssids(self) -> bool:
+        return bool(self._bssids)
+
+    def set_bssids(self, table: dict[str, dict[str, Any]]) -> None:
+        """BSSID -> band/channel/SSID of the devices' radios (see bssid_table)."""
+        self._bssids = table
 
     def apply_syslog(self, ap_mac: str, event: SyslogEvent, now: datetime) -> bool:
         """Apply a connect/disconnect from the device ap_mac; True if anything changed."""
@@ -133,9 +149,9 @@ class FastState:
                 "source": "snmp",
                 "at": now,
             }
-            band = client.band or self._bands.get(client.bssid or "")
-            if band:
-                new["channelClassStr"] = band
+            new.update(self._bssids.get(client.bssid or "", {}))
+            if client.band:
+                new["channelClassStr"] = client.band
             if entry is None or any(entry.get(k) != new.get(k) for k in _VALUE_KEYS):
                 changed = True
             self._entries[mac] = new

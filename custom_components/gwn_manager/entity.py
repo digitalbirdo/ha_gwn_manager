@@ -10,6 +10,7 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, Device
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_SERVER_URL,
@@ -85,10 +86,13 @@ def async_setup_client_entities(
 
     @callback
     def _add_new() -> None:
+        now = dt_util.utcnow()
         new = [
             mac
             for mac, client in coordinator.data.clients.items()
             if mac not in known
+            and mac not in coordinator.removed
+            and not coordinator.is_stale(mac, client, now)
             and (track_offline or client["connected"])
             and (not ssid_filter or client.get("wired") == 1 or client.get("ssid") in ssid_filter)
         ]

@@ -49,7 +49,8 @@
           "syslog_debug_events": "Debug-Ereignisse auswerten",
           "fast_snmp": "Schnelle Aktualisierung per SNMP",
           "snmp_community": "SNMP-Community",
-          "snmp_interval": "SNMP-Intervall"
+          "snmp_interval": "SNMP-Intervall",
+          "remove_after_days": "Clients entfernen nach (Tagen)"
         },
         "data_description": {
           "presence_interval": "Wie oft geprüft wird, welche Clients verbunden sind. Verbinden und Trennen erscheinen im GWN Manager sofort.",
@@ -63,7 +64,8 @@
           "syslog_debug_events": "Auch die ausführlichen Ereignisse (Signal, Rate, Kanal beim Verbinden) auswerten, die die Geräte nur bei Syslog-Stufe Debug senden – etwa viermal so viele Meldungen.",
           "fast_snmp": "Signal und Rate der WLAN-Clients direkt von den Geräten lesen (SNMP v2c, im GWN Manager einschalten). Die Geräte werden automatisch erkannt.",
           "snmp_community": "Lese-Community aus dem GWN Manager.",
-          "snmp_interval": "Pause zwischen zwei SNMP-Runden; eine Runde über alle Geräte dauert etwa 10–15 s."
+          "snmp_interval": "Pause zwischen zwei SNMP-Runden; eine Runde über alle Geräte dauert etwa 10–15 s.",
+          "remove_after_days": "Clients, die länger nicht verbunden waren, werden samt Entitäten aus Home Assistant entfernt und kommen zurück, sobald sie sich wieder verbinden. 0 = nie. Nicht verbundene Clients lassen sich auch auf ihrer Geräteseite von Hand löschen."
         }
       }
     }

@@ -139,6 +139,9 @@ Copy `custom_components/gwn_manager` into your `config/custom_components/` folde
 - **Manual assignments**: one line per client, `client = device` or `client = device:port` (names or MACs),
   e.g. for devices behind an AP's LAN port, which GWN Manager attributes to the router
 - **Track offline clients**: create entities for all clients known to GWN Manager, not only for currently connected ones
+- **Remove clients after (days)** (default 0 = never): clients not connected for longer are removed
+  with their entities and come back when they connect again. Clients that aren't connected can also be
+  deleted by hand on their device page.
 - **Fast updates via syslog / SNMP** (default off), see below
 
 ### Fast updates (syslog and SNMP)

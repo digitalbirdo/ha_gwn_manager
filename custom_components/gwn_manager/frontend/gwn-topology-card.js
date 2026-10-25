@@ -22,7 +22,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.6.1";
+const TOPOLOGY_VERSION = "0.6.2";
 const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
 const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
