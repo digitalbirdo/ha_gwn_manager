@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+import contextlib
 from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
@@ -109,7 +110,13 @@ class FastSources:
             self._transport = None
         if self._task is not None:
             self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
             self._task = None
+        if self._engine is not None:
+            # Closes the engine's UDP socket; a new one is built on the next start.
+            self._engine.close_dispatcher()
+            self._engine = None
         if self._pending is not None:
             self._pending()
             self._pending = None
@@ -155,27 +162,36 @@ class FastSources:
 
     async def _snmp_loop(self) -> None:
         while True:
-            await self._detect_devices()
-            started = dt_util.utcnow()
-            pollers = list(self._pollers.items())
-            results = await asyncio.gather(*(p.poll() for _, p in pollers), return_exceptions=True)
-            changed = False
-            for (device, _), result in zip(pollers, results, strict=True):
-                if isinstance(result, SnmpUnavailable | TimeoutError | OSError):
-                    if not self.snmp_errors[device]:
-                        _LOGGER.info("SNMP of %s unavailable: %s", device, result)
-                    self.snmp_errors[device] += 1
-                    continue
-                if isinstance(result, BaseException):
-                    _LOGGER.exception("SNMP poll of %s failed", device, exc_info=result)
-                    continue
-                if self.coordinator.fast and self.coordinator.fast.apply_snmp(
-                    device, result, dt_util.utcnow(), started
-                ):
-                    changed = True
-            if changed:
-                self._schedule_update()
+            try:
+                await self._snmp_round()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Keep polling: one odd round must not stop SNMP until a reload.
+                _LOGGER.exception("SNMP round failed")
             await asyncio.sleep(self.interval)
+
+    async def _snmp_round(self) -> None:
+        await self._detect_devices()
+        started = dt_util.utcnow()
+        pollers = list(self._pollers.items())
+        results = await asyncio.gather(*(p.poll() for _, p in pollers), return_exceptions=True)
+        changed = False
+        for (device, _), result in zip(pollers, results, strict=True):
+            if isinstance(result, SnmpUnavailable):
+                if not self.snmp_errors[device]:
+                    _LOGGER.info("SNMP of %s unavailable: %s", device, result)
+                self.snmp_errors[device] += 1
+                continue
+            if isinstance(result, BaseException):
+                _LOGGER.error("SNMP poll of %s failed: %r", device, result)
+                continue
+            if self.coordinator.fast and self.coordinator.fast.apply_snmp(
+                device, result, dt_util.utcnow(), started
+            ):
+                changed = True
+        if changed:
+            self._schedule_update()
 
     async def _detect_devices(self) -> None:
         aps = self.coordinator.data.aps if self.coordinator.data else {}

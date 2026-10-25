@@ -60,7 +60,7 @@ class SnmpPoller:
                 if await self._walk(self.host, self.community, oid):
                     self.variant = variant
                     return variant
-            except (TimeoutError, OSError, SnmpUnavailable):
+            except Exception:  # noqa: BLE001 - any odd agent reply means: no usable SNMP
                 return None
         return None
 
@@ -73,7 +73,7 @@ class SnmpPoller:
         for name, number in COLUMNS[self.variant].items():
             try:
                 columns[name] = await self._walk(self.host, self.community, f"{table}.{number}")
-            except (TimeoutError, OSError) as err:
+            except Exception as err:  # noqa: BLE001 - timeouts and odd agent replies alike
                 raise SnmpUnavailable(str(err)) from err
         return build_clients(self.variant, columns)
 

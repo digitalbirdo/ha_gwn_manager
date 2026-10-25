@@ -60,3 +60,15 @@ def test_poll_timeout_raises_unavailable():
     p.variant = MibVariant.AP
     with pytest.raises(SnmpUnavailable):
         asyncio.run(p.poll())
+
+
+def test_detect_unexpected_error_gives_none():
+    p = SnmpPoller("h", "public", walk=fake_walk(ValueError("odd reply")))
+    assert asyncio.run(p.detect()) is None
+
+
+def test_poll_unexpected_error_raises_unavailable():
+    p = SnmpPoller("h", "public", walk=fake_walk(ValueError("odd reply")))
+    p.variant = MibVariant.AP
+    with pytest.raises(SnmpUnavailable):
+        asyncio.run(p.poll())
