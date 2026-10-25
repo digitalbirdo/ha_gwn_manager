@@ -250,6 +250,13 @@ coordinates and keys, but check with `grep` for your own values before committin
   current AP over SNMP every ~3 s while the panel is open (`SnmpPoller.poll_client`). Backend:
   `client_history.py` (bounded per-client samples + events, done with tests), WebSocket
   `gwn_manager/subscribe_client`; frontend: shared module `gwn-client-detail.js`, loaded lazily.
+- mDNS names and device types (about an hour): listen passively via Home Assistant's own zeroconf
+  instance (no extra traffic) for service announcements (`_esphomelib._tcp`, `_http._tcp`,
+  `_airplay._tcp`, `_googlecast._tcp`, `_hap._tcp`, `_ipp._tcp`, …) and map their addresses to clients by
+  IP. Use the name as a fallback when GWN Manager has no hostname, and the service type for icons in the
+  cards. Tested: browsing found 32 named devices in 6 s; reverse PTR queries ("who is this IP") are
+  hardly answered, so don't rely on them. Doesn't help clients that announce nothing (VMs, private-MAC
+  phones, simple IoT devices).
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
 
 The maintainer may keep a local, git-ignored `LIVING_DOCUMENT.md` with private project notes;
