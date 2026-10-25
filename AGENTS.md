@@ -144,6 +144,8 @@ flaky – call the card's methods via `page.evaluate` instead (e.g. `_showToolti
   (Wi-Fi QR code) or would flood the registry are **disabled by default**.
 - Keep `diagnostics.py` redaction up to date when new sensitive fields appear.
 - `python -m py_compile` the changed files and `node --check` the card before restarting.
+- **Always verify every change in the dev instance before committing or releasing** (restart,
+  then check the behaviour in the browser, e.g. with Playwright). Syntax checks alone are not enough.
 
 ## Privacy and safety
 
@@ -163,7 +165,11 @@ flaky – call the card's methods via `page.evaluate` instead (e.g. `_showToolti
 3. Commit and push to `main`; wait for the **Validate** workflow (hassfest + HACS) to pass.
 4. `gh release create vX.Y.Z --target main --title "vX.Y.Z – <short summary>" --notes …`.
    Always give the title a short summary after the version: HACS shows the release title in its
-   version list, a bare version number tells users nothing.
+   version list, a bare version number tells users nothing. Always pass real release notes too
+   (a short bullet list of the changes) – never leave `--notes` empty or rely on
+   `--generate-notes` alone; HACS shows the release body as the update description.
+   Write the notes to a file and use `--notes-file` (quoted heredoc): backticks inside
+   `--notes "…"` are run by the shell and once left only "-" as the body.
 5. Users update through HACS and restart Home Assistant.
 
 HACS installs from the tagged sources. Don't switch to `zip_release`: GitHub's

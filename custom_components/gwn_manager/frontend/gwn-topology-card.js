@@ -21,7 +21,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.5.9";
+const TOPOLOGY_VERSION = "0.5.10";
 const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
 const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
@@ -54,7 +54,7 @@ const TEXT = {
     unknown: "Unknown", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "active ports", uplinkUnknown: "Uplink unknown", noData: "Waiting for data…",
     port: "Port", wired: "Wired", tapHint: "Tap a device to show its connections",
-    noClients: "No clients connected", details: "Details", copy: "Copy", copied: "Copied", ssids: "SSIDs", hidden: "hidden",
+    noClients: "No clients connected", details: "Details", copy: "Copy", history: "Show history", copied: "Copied", ssids: "SSIDs", hidden: "hidden",
     radios: "Radios", band: "Band", channel: "Ch", width: "Width", txPower: "Power", load: "Load",
     widthHint: "Width: widest one a client uses",
   },
@@ -65,7 +65,7 @@ const TEXT = {
     unknown: "Unbekannt", internetOnline: "Internet online", internetOffline: "Internet offline",
     activePorts: "aktive Ports", uplinkUnknown: "Uplink unbekannt", noData: "Warte auf Daten …",
     port: "Port", wired: "Kabel", tapHint: "Gerät antippen, um Verbindungen zu zeigen",
-    noClients: "Keine Clients verbunden", details: "Details", copy: "Kopieren", copied: "Kopiert", ssids: "SSIDs", hidden: "versteckt",
+    noClients: "Keine Clients verbunden", details: "Details", copy: "Kopieren", history: "Verlauf anzeigen", copied: "Kopiert", ssids: "SSIDs", hidden: "versteckt",
     radios: "Funk", band: "Band", channel: "Ch", width: "Breite", txPower: "Leistung", load: "Auslastung",
     widthHint: "Breite: die breiteste, die ein Client nutzt",
   },
@@ -298,7 +298,7 @@ class GwnTopologyCard extends HTMLElement {
       if (values.length < 2) return "";
       const lo = Math.min(...values);
       const hi = Math.max(...values);
-      return `<svg class="spark" viewBox="0 0 40 14" width="40" height="14" aria-hidden="true">
+      return `<svg class="spark" data-stat="${esc(entityId)}" viewBox="0 0 40 14" width="40" height="14" aria-hidden="true">
           <title>${esc(`min ${lo}${unit} · max ${hi}${unit}`)}</title>
           <path d="${linePath(points, start, end, 40, 14, min ?? lo, max ?? hi)}" style="stroke:${color}"/>
         </svg>`;
@@ -374,12 +374,12 @@ class GwnTopologyCard extends HTMLElement {
     // vendor prefix, so show the distinguishing end ("…FD:55:17").
     const shortName = (name) => (MAC_NAME.test(name || "") ? `…${name.slice(-8)}` : name);
     const clientRow = (c) => `
-      <div class="client-row" data-client-entity="${esc(c.entity_id ?? "")}">
+      <div class="client-row" data-device="${esc(c.device_id ?? "")}" data-client-entity="${esc(c.entity_id ?? "")}">
         <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
         <span class="cbody">
           <span class="cline"><span class="cname" title="${esc(c.name)}">${esc(shortName(c.name))}</span>${c.ip
             ? `<button class="ip" data-copy="${esc(c.ip)}" title="${esc(this._t("copy"))}">${esc(c.ip)}</button>` : ""}${c.rssi != null && !c.wired
-            ? `<span class="rssi" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
+            ? `<span class="rssi" data-stat="${esc(c.signal_entity ?? "")}" title="${esc(this._t("history"))}" style="color:${rssiColor(c.rssi)}">${esc(c.rssi)} dBm</span>` : ""}</span>
           <span class="cline2"><span class="cmeta">${clientMeta(c)}</span>${c.rssi != null && !c.wired
             ? spark(c.signal_entity, { min: -90, max: -30, color: rssiColor(c.rssi), unit: " dBm" }) : ""}</span>
         </span>
@@ -429,7 +429,8 @@ class GwnTopologyCard extends HTMLElement {
       this._config.device_images && device.image && !this._failedImages.has(device.image) ? device.image : null;
 
     const infoButton = (device) =>
-      device.entity_id ? `<button class="info" data-info="${esc(device.entity_id)}" title="Info">ⓘ</button>` : "";
+      device.device_id || device.entity_id
+        ? `<button class="info" data-device="${esc(device.device_id ?? "")}" data-info="${esc(device.entity_id ?? "")}" title="Info">ⓘ</button>` : "";
 
     const apCard = (ap) => {
       const total = Object.values(ap.bands || {}).reduce((a, b) => a + b, 0);
@@ -572,10 +573,23 @@ class GwnTopologyCard extends HTMLElement {
         this._render();
       });
     }
+    // Device page of Home Assistant; there is no device dialog, so navigate.
+    const openDevice = (el) => {
+      if (!el.dataset.device) return moreInfo(el.dataset.info || el.dataset.clientEntity);
+      history.pushState(null, "", `/config/devices/device/${el.dataset.device}`);
+      window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+    };
     for (const el of this.shadowRoot.querySelectorAll("[data-info]")) {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
-        moreInfo(el.dataset.info);
+        openDevice(el);
+      });
+    }
+    // Signal value or its sparkline: history of the signal sensor.
+    for (const el of this.shadowRoot.querySelectorAll("[data-stat]")) {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        moreInfo(el.dataset.stat);
       });
     }
     for (const chart of this.shadowRoot.querySelectorAll(".wan-chart")) {
@@ -593,7 +607,7 @@ class GwnTopologyCard extends HTMLElement {
     for (const el of this.shadowRoot.querySelectorAll("[data-client-entity]")) {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
-        moreInfo(el.dataset.clientEntity);
+        openDevice(el);
       });
     }
     for (const img of this.shadowRoot.querySelectorAll(".photo img")) {
@@ -964,7 +978,8 @@ const STYLE = `
   }
   .client-row .ip:hover { color: var(--accent); background: rgba(56, 198, 232, .1); }
   .client-row .ip.copied { color: var(--ok); }
-  .client-row .rssi { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .client-row .rssi { font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; border-radius: 4px; }
+  .client-row .rssi:hover { background: rgba(56, 198, 232, .1); }
   .client-row .cline2 { display: flex; gap: 6px; align-items: center; }
   .client-row .cline2 svg.spark { width: 28px; }
   .client-row .cline2 .cmeta { flex: 1; min-width: 0; }
