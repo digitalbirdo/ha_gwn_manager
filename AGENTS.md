@@ -200,6 +200,11 @@ coordinates and keys, but check with `grep` for your own values before committin
 
 ## Open ideas
 
+- Zeroconf discovery: GWN devices announce `_gwn_controller._udp.local.` (TXT `product`, `mac`,
+  `version`, `role`) and `_http._tcp` ("Grandstream <model> Web Management"); GWN Manager itself
+  doesn't. So discovery could only offer "GWN devices found – set up GWN Manager?" (manifest
+  `zeroconf` + `async_step_zeroconf`, abort if an entry exists); URL, App ID and secret stay manual.
+  About an hour; mainly helps new users find the integration.
 - Unit tests with `pytest-homeassistant-custom-component` and a mocked API.
 - Show which switch port each AP is connected to on the map (the API doesn't expose it yet).
 - Change indication in the topology card, only for meaningful events (not every RSSI/rate update,
