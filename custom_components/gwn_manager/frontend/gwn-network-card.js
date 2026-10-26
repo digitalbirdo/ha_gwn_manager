@@ -21,7 +21,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.6.3";
+const VERSION = "0.6.4";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
