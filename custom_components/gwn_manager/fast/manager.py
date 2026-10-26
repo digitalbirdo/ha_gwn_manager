@@ -20,6 +20,7 @@ from ..const import (
     CONF_SNMP_COMMUNITY,
     CONF_SNMP_INTERVAL,
     CONF_SYSLOG_DEBUG_EVENTS,
+    CONF_SYSLOG_FORWARD,
     CONF_SYSLOG_PORT,
     DEFAULT_SNMP_COMMUNITY,
     DEFAULT_SNMP_INTERVAL,
@@ -28,7 +29,7 @@ from ..const import (
 )
 from .snmp import SnmpPoller, SnmpUnavailable, build_engine
 from .state import FastState
-from .syslog import start_syslog
+from .syslog import parse_forward_targets, start_syslog
 from .syslog_parse import SyslogEvent
 
 if TYPE_CHECKING:
@@ -53,6 +54,11 @@ class FastSources:
         self.snmp_enabled = options.get(CONF_FAST_SNMP, False)
         self.port = options.get(CONF_SYSLOG_PORT, DEFAULT_SYSLOG_PORT)
         self.debug_events = options.get(CONF_SYSLOG_DEBUG_EVENTS, False)
+        try:
+            self.forward = parse_forward_targets(options.get(CONF_SYSLOG_FORWARD), self.port)
+        except ValueError as err:
+            _LOGGER.warning("Ignoring syslog forwarding targets: %s", err)
+            self.forward = []
         self.community = options.get(CONF_SNMP_COMMUNITY, DEFAULT_SNMP_COMMUNITY)
         self.interval = options.get(CONF_SNMP_INTERVAL, DEFAULT_SNMP_INTERVAL)
         self._transport: asyncio.DatagramTransport | None = None
@@ -85,7 +91,10 @@ class FastSources:
         if self.syslog_enabled:
             try:
                 self._transport = await start_syslog(
-                    self.port, self._on_syslog, debug_events=self.debug_events
+                    self.port,
+                    self._on_syslog,
+                    debug_events=self.debug_events,
+                    forward=self.forward,
                 )
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             except OSError as err:
@@ -244,6 +253,9 @@ class FastSources:
             "syslog": self.syslog_enabled,
             "syslog_listening": self._transport is not None,
             "syslog_debug_events": self.debug_events,
+            "syslog_forward_targets": len(self.forward),
+            "syslog_forwarded": self._transport.get_protocol().stats["forwarded"] if self._transport else 0,
+            "syslog_forward_errors": self._transport.get_protocol().stats["forward_errors"] if self._transport else 0,
             "snmp": self.snmp_enabled,
             "stats": dict(self.stats),
             "last_syslog": self.last_syslog,

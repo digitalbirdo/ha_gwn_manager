@@ -43,6 +43,7 @@ from .const import (
     CONF_SNMP_COMMUNITY,
     CONF_SNMP_INTERVAL,
     CONF_SYSLOG_DEBUG_EVENTS,
+    CONF_SYSLOG_FORWARD,
     CONF_SYSLOG_PORT,
     DEFAULT_REMOVE_AFTER_DAYS,
     DEFAULT_SERVER_URL,
@@ -56,6 +57,7 @@ from .const import (
     MIN_SCAN_INTERVAL,
     MIN_SNMP_INTERVAL,
 )
+from .fast.syslog import parse_forward_targets
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -187,12 +189,24 @@ class GWNOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            try:
+                user_input[CONF_SYSLOG_FORWARD] = ", ".join(
+                    f"{host}:{port}"
+                    for host, port in parse_forward_targets(
+                        user_input.get(CONF_SYSLOG_FORWARD), user_input.get(CONF_SYSLOG_PORT)
+                    )
+                )
+            except ValueError:
+                errors[CONF_SYSLOG_FORWARD] = "invalid_forward"
+            else:
+                return self.async_create_entry(data=user_input)
 
         options = self.config_entry.options
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             description_placeholders={"settings_url": self._settings_url()},
             data_schema=vol.Schema(
                 {
@@ -251,6 +265,10 @@ class GWNOptionsFlow(OptionsFlow):
                         ),
                         vol.Coerce(int),
                     ),
+                    vol.Optional(
+                        CONF_SYSLOG_FORWARD,
+                        description={"suggested_value": options.get(CONF_SYSLOG_FORWARD, "")},
+                    ): TextSelector(TextSelectorConfig(multiline=False)),
                     vol.Required(
                         CONF_SYSLOG_DEBUG_EVENTS,
                         default=options.get(CONF_SYSLOG_DEBUG_EVENTS, False),

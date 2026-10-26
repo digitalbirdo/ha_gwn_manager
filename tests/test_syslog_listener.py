@@ -32,7 +32,7 @@ def test_only_client_events_reach_callback_and_port_is_freed():
 
     got, stats = asyncio.run(run())
     assert got == [("127.0.0.1", "connected")]
-    assert stats == {"lines": 3, "events": 1}
+    assert stats == {"lines": 3, "events": 1, "forwarded": 0, "forward_errors": 0}
 
 
 def test_debug_events_option_passed_to_parser():

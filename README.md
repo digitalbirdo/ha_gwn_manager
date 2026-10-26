@@ -159,6 +159,11 @@ that doesn't answer simply stays on the API.
   and enter its read community (default `public`). Access points (GWN76xx) and routers (GWN70xx) are
   detected automatically; access points report the signal-to-noise ratio, which is converted with a
   noise floor of −95 dBm.
+- **Forward syslog to**: optional list of `ip:port` targets (IPv4, comma separated). Every received
+  datagram is also sent unchanged to each target, before anything is evaluated, so another tool (a log
+  collector, a second Home Assistant, your own analysis scripts) gets the complete stream while the
+  devices only need one syslog server. Not this receiver's own port; an unreachable target never
+  disturbs receiving. Diagnostics count forwarded lines and send errors.
 - The GWN API can't switch syslog or SNMP on – do it in GWN Manager under *System settings*
   (`<GWN Manager URL>/network/<id>/settings/system`; the options dialog links there directly). If the syslog port can't be
   opened, a repair issue says so and the integration keeps running without syslog.

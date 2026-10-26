@@ -55,3 +55,7 @@ MAX_SNMP_INTERVAL = 60
 # Remove clients (devices + entities) after this many days without a connection; 0 = never.
 CONF_REMOVE_AFTER_DAYS = "remove_after_days"
 DEFAULT_REMOVE_AFTER_DAYS = 0
+
+# Forward every received syslog datagram unchanged to these "ip:port" targets (comma separated),
+# so other tools can analyse the same stream.
+CONF_SYSLOG_FORWARD = "syslog_forward"

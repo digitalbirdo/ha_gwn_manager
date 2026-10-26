@@ -92,6 +92,9 @@ expire after `fast_max_age`, then the API wins again. `async_fast_update()` publ
   `Sta is freed: sta=…, bssid=…` (level notice); `gseventlog send {json}` (subtype 0/1, plus client
   info) only at level debug. Sender → device by source IP, else the MAC tag `GWNxxxx[<mac12>]`.
   ~40 lines/s at notice, ~150/s at debug – keep the substring pre-filter cheap.
+- Forwarding (`syslog_forward`, `fast/syslog.py`): `SyslogProtocol` sends each datagram unchanged to the
+  `ip:port` targets right after receiving (non-blocking UDP socket, errors only counted). IPv4 literals
+  only (no blocking name resolution); a loopback/wildcard target on the own port is refused (loop).
 - SNMP v2c (`fast/snmp.py`): enterprise 42397. APs (GWN76xx) client table `…42397.1.1.3.3.1`
   (2 MAC, 4 BSSID, 6 SNR dB, 11 rate), routers (GWN70xx) `…42397.1.2.1.3.1` (2 MAC without colons,
   3 BSSID, 6 band, 8 RSSI dBm). Only single-OID GETNEXT works: GETBULK times out, GET by index and

@@ -50,7 +50,8 @@
           "fast_snmp": "Fast updates via SNMP",
           "snmp_community": "SNMP community",
           "snmp_interval": "SNMP interval",
-          "remove_after_days": "Remove clients after (days)"
+          "remove_after_days": "Remove clients after (days)",
+          "syslog_forward": "Forward syslog to"
         },
         "data_description": {
           "presence_interval": "How often to check which clients are connected. Connects and disconnects show up in GWN Manager right away.",
@@ -65,10 +66,14 @@
           "fast_snmp": "Read signal and rate of the Wi-Fi clients directly from the devices (SNMP v2c, enable it in GWN Manager). Devices are detected automatically.",
           "snmp_community": "Read community set in GWN Manager.",
           "snmp_interval": "Pause between two SNMP rounds; one round of all devices takes about 10–15 s.",
-          "remove_after_days": "Clients not connected for longer than this are removed from Home Assistant with their entities, and come back when they connect again. 0 = never. Not connected clients can also be deleted by hand on their device page."
+          "remove_after_days": "Clients not connected for longer than this are removed from Home Assistant with their entities, and come back when they connect again. 0 = never. Not connected clients can also be deleted by hand on their device page.",
+          "syslog_forward": "Send every received syslog message unchanged to these addresses as well, e.g. to analyse the same stream with another tool or a second Home Assistant. Comma separated IPv4 addresses with port, like 10.0.0.3:5514 (no host names). Needs fast updates via syslog."
         },
         "description": "Syslog and SNMP are switched on in GWN Manager under System settings: {settings_url}"
       }
+    },
+    "error": {
+      "invalid_forward": "Enter IPv4 addresses with port like 10.0.0.3:5514, separated by commas; not this receiver's own port."
     }
   },
   "entity": {
