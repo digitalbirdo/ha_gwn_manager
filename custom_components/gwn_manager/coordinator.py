@@ -271,6 +271,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             rates = self._rates.get(mac) if client["connected"] else None
             client["uploadRate"], client["downloadRate"] = rates or (None, None)
 
+        self._attach_wired_to_switch(data)
         self._detect_device_uplinks(data)
         self._apply_manual_uplinks(data)
         self._detect_events(data)
@@ -348,6 +349,32 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
             merged["connected"] = True
             merged["wired"] = 2
             self._last_connected[mac] = now
+
+    def _attach_wired_to_switch(self, data: GWNData) -> None:
+        """Move wired clients the API attributes to the router onto the switch.
+
+        GWN Manager reports every wired client with the router as its "AP",
+        even when it hangs on a switch; the "port" field (e.g. "1/0/13") is the
+        switch port. Clients behind an AP's LAN port have that AP as apId and
+        stay where they are.
+        """
+        switches = [mac for mac, ap in data.aps.items() if ap.get("ports")]
+        if len(switches) != 1:
+            return  # ambiguous with several switches
+        switch_mac = switches[0]
+        numbers = {str(p.get("silkScreenPort")) for p in data.aps[switch_mac]["ports"]}
+        for client in data.clients.values():
+            router = data.aps.get((client.get("apId") or "").upper())
+            port = client.get("port") or ""
+            if (
+                client.get("wired") == 1
+                and router is not None
+                and router.get("deviceType") == "ROUTER"
+                and "/" in port
+                and port.rsplit("/", 1)[-1] in numbers
+            ):
+                client["apId"] = switch_mac
+                client["apName"] = data.aps[switch_mac].get("name")
 
     def _detect_device_uplinks(self, data: GWNData) -> None:
         """Guess which switch port each AP and the router are plugged into.
