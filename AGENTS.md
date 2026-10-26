@@ -263,8 +263,10 @@ coordinates and keys, but check with `grep` for your own values before committin
 - Client diagnosis (done, memory only): WebSocket `gwn_manager/client_diagnostics` (mac, hours) returns current
   values, events, samples, stats and findings; the panel polls it every 5 s. Syslog diagnostics are parsed in
   `syslog_parse._parse_diag` (fast/slow roaming, roam away reason, disassoc, auth/assoc status, ping-pong, steering;
-  all but the first two only at syslog level debug). Open: persist the log over restarts (`Store`), faster SNMP
-  polling of the selected client (`SnmpPoller.poll_client`), per-client ping/DNS measurements.
+  all but the first two only at syslog level debug). While a panel is open the client is polled over SNMP every 2 s
+  (`SnmpPoller.poll_client`: row found once, then one GETNEXT per column; `FastSources.request_live`, 20 s per request).
+  Option `persist_diagnosis` (default off) saves events and samples in a `Store` (throttled to every 5 min, written
+  on unload/stop, deleted when the option is turned off). Open: per-client ping/DNS measurements.
 - mDNS names and device types (about an hour): listen passively via Home Assistant's own zeroconf
   instance (no extra traffic) for service announcements (`_esphomelib._tcp`, `_http._tcp`,
   `_airplay._tcp`, `_googlecast._tcp`, `_hap._tcp`, `_ipp._tcp`, …) and map their addresses to clients by

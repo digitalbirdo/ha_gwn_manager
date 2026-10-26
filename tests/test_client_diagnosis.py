@@ -144,3 +144,14 @@ def test_annotate_and_bssid_map():
     events = annotate(events, samples, bssids)
     assert (events[0]["from_ap"], events[0]["from_band"]) == (A, "5G")
     assert events[1]["band"] == "6G"
+
+
+def test_dump_and_load_keep_events_and_drop_old_ones():
+    log = DiagnosisLog(max_age=timedelta(hours=1))
+    log.add(PHONE, con(A), at(0))
+    log.add(PHONE, con(B), at(3000))
+    restored = DiagnosisLog(max_age=timedelta(hours=1))
+    restored.load(log.dump(), at(3700))
+    assert [e["ap"] for e in restored.get(PHONE)] == [B]
+    restored.load({PHONE: [{"type": "connected", "t": "garbage"}]}, at(3700))  # broken data is ignored
+    assert [e["ap"] for e in restored.get(PHONE)] == [B]

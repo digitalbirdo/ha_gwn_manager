@@ -85,6 +85,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GWNConfigEntry) -> bool:
     """Set up GWN Manager from a config entry."""
     coordinator = GWNCoordinator(hass, entry)
     await coordinator.async_load_removed()
+    await coordinator.async_load_diagnosis()
+    entry.async_on_unload(coordinator.async_save_diagnosis)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 

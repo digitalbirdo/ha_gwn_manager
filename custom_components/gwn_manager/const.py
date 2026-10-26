@@ -42,6 +42,8 @@ CONF_FAST_SYSLOG = "fast_syslog"
 CONF_SYSLOG_PORT = "syslog_port"
 # Also evaluate the JSON events the devices only send at syslog level debug.
 CONF_SYSLOG_DEBUG_EVENTS = "syslog_debug_events"
+# Keep the events and signal history of the client diagnosis over restarts (off: memory only).
+CONF_PERSIST_DIAGNOSIS = "persist_diagnosis"
 CONF_FAST_SNMP = "fast_snmp"
 CONF_SNMP_COMMUNITY = "snmp_community"
 CONF_SNMP_INTERVAL = "snmp_interval"

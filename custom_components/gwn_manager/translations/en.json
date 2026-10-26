@@ -51,6 +51,8 @@
           "snmp_community": "SNMP community",
           "snmp_interval": "SNMP interval",
           "remove_after_days": "Remove clients after (days)",
+          "persist_diagnosis": "Keep diagnosis history over restarts",
+          "persist_diagnosis": "Save the events and signal history of the client diagnosis panel to disk (every few minutes and when Home Assistant stops) and load them at start, so the longer periods survive restarts. Off: kept in memory only. Needs some disk space (a few MB with many clients).",
           "syslog_forward": "Forward syslog to"
         },
         "data_description": {

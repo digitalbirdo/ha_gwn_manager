@@ -42,6 +42,7 @@ from .const import (
     CONF_FAST_SYSLOG,
     CONF_SNMP_COMMUNITY,
     CONF_SNMP_INTERVAL,
+    CONF_PERSIST_DIAGNOSIS,
     CONF_SYSLOG_DEBUG_EVENTS,
     CONF_SYSLOG_FORWARD,
     CONF_SYSLOG_PORT,
@@ -287,6 +288,10 @@ class GWNOptionsFlow(OptionsFlow):
                         CONF_SNMP_INTERVAL,
                         default=options.get(CONF_SNMP_INTERVAL, DEFAULT_SNMP_INTERVAL),
                     ): _seconds(MIN_SNMP_INTERVAL, MAX_SNMP_INTERVAL),
+                    vol.Required(
+                        CONF_PERSIST_DIAGNOSIS,
+                        default=options.get(CONF_PERSIST_DIAGNOSIS, False),
+                    ): bool,
                 }
             ),
         )

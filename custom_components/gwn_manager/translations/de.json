@@ -51,6 +51,8 @@
           "snmp_community": "SNMP-Community",
           "snmp_interval": "SNMP-Intervall",
           "remove_after_days": "Clients entfernen nach (Tagen)",
+          "persist_diagnosis": "Diagnose-Verlauf über Neustarts behalten",
+          "persist_diagnosis": "Ereignisse und Signalverlauf der Client-Diagnose auf der Festplatte sichern (alle paar Minuten und beim Beenden von Home Assistant) und beim Start laden, damit auch die längeren Zeiträume Neustarts überstehen. Aus: nur im Arbeitsspeicher. Braucht etwas Platz (einige MB bei vielen Clients).",
           "syslog_forward": "Syslog weiterleiten an"
         },
         "data_description": {

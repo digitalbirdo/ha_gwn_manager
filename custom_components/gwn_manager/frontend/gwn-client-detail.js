@@ -10,14 +10,14 @@
   if (window.gwnClientDetail) return;
 
   const REFRESH_MS = 5000;
-  const WINDOWS = [[1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 d"]];
+  const WINDOWS = [[5 / 60, "5 min"], [0.25, "15 min"], [1, "1 h"], [6, "6 h"], [24, "24 h"], [168, "7 d"]];
   const PALETTE = ["#38c6e8", "#a78bfa", "#3ee08f", "#f5c542", "#f472b6", "#60a5fa", "#fb923c"];
   const BAND_COLORS = { "2.4G": "#f5c542", "5G": "#38c6e8", "6G": "#a78bfa" };
   const WEAK = -75;
 
   const TEXT = {
     en: {
-      title: "Connection diagnosis", close: "Close", device: "Device page", window: "Period",
+      live: "Live: measured every 2 s", title: "Connection diagnosis", close: "Close", device: "Device page", window: "Period",
       connection: "Connection", offline: "Not connected", ap: "Access point", band: "Band", ssid: "SSID",
       signal: "Signal", rate: "Link rate", mode: "Wi-Fi mode", ip: "IP", source: "Source", lastRoam: "Last roam",
       fast: "802.11r fast roaming", init: "full re-association", sources: { api: "API", snmp: "SNMP", syslog: "Syslog" },
@@ -71,7 +71,7 @@
       },
     },
     de: {
-      title: "Verbindungs-Diagnose", close: "Schließen", device: "Geräteseite", window: "Zeitraum",
+      live: "Live: Messung alle 2 s", title: "Verbindungs-Diagnose", close: "Schließen", device: "Geräteseite", window: "Zeitraum",
       connection: "Verbindung", offline: "Nicht verbunden", ap: "Access Point", band: "Band", ssid: "SSID",
       signal: "Signal", rate: "Verbindungsrate", mode: "WLAN-Modus", ip: "IP", source: "Quelle", lastRoam: "Letzter Wechsel",
       fast: "802.11r Fast Roaming", init: "volle Neuanmeldung", sources: { api: "API", snmp: "SNMP", syslog: "Syslog" },
@@ -158,6 +158,7 @@
   .finding.high { border-color: var(--bad); } .finding.low { border-color: var(--muted); }
   .finding b { font-size: 14px; } .finding p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; }
   .finding em { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .live { color: var(--ok); }
   .note { color: var(--muted); font-size: 13px; }
   svg { width: 100%; height: auto; display: block; background: var(--card); border-radius: 10px; }
   svg text { fill: var(--muted); font-size: 10px; }
@@ -174,7 +175,7 @@
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._hours = 24;
+      this._hours = 1;
       this._limit = 40;
       this._hideSteer = true;
     }
@@ -239,7 +240,7 @@
         <div class="scrim"></div>
         <div class="sheet ${dark ? "dark" : "light"}">
           <header>
-            <h2>${esc(o.name)}<small>${esc(t.title)} · ${esc(o.mac)}</small></h2>
+            <h2>${esc(o.name)}<small>${esc(t.title)} · ${esc(o.mac)}${d?.live ? ` · <span class="live">● ${esc(t.live)}</span>` : ""}</small></h2>
             ${o.deviceId || o.entityId ? `<button data-device>${esc(t.device)}</button>` : ""}
             <button data-close>${esc(t.close)}</button>
           </header>

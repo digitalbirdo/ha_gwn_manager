@@ -341,6 +341,7 @@ def _client_diagnostics(entry: GWNConfigEntry, mac: str, hours: float) -> dict[s
     blind = (
         {ap for ap in coordinator.data.aps if not fast.syslog_by_device[ap]} if syslog_on and fast else set()
     )
+    live = bool(fast and fast.request_live(mac))
     client = coordinator.data.clients.get(mac) or {}
     current_ap = (client.get("apId") or "").upper() or None
     result = analyze(
@@ -359,6 +360,7 @@ def _client_diagnostics(entry: GWNConfigEntry, mac: str, hours: float) -> dict[s
         "hours": hours,
         "source": source,
         "collecting_since": coordinator.started.isoformat(),
+        "live": live,
         "syslog": syslog_on,
         "debug_events": bool(fast and fast.debug_events),
         "current": {
@@ -388,7 +390,7 @@ def _client_diagnostics(entry: GWNConfigEntry, mac: str, hours: float) -> dict[s
         vol.Required("type"): "gwn_manager/client_diagnostics",
         vol.Required("mac"): str,
         vol.Optional("entry_id"): str,
-        vol.Optional("hours", default=24): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=168)),
+        vol.Optional("hours", default=24): vol.All(vol.Coerce(float), vol.Range(min=0.05, max=168)),
     }
 )
 @callback

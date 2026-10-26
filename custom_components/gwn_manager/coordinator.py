@@ -33,6 +33,7 @@ from .const import (
     CONF_APP_ID,
     CONF_APP_SECRET,
     CONF_MANUAL_UPLINKS,
+    CONF_PERSIST_DIAGNOSIS,
     CONF_PRESENCE_INTERVAL,
     CONF_REMOVE_AFTER_DAYS,
     CONF_SERVER_URL,
@@ -137,6 +138,10 @@ def parse_timestamp(value: Any, time_zone: str | None = None) -> datetime | None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=tzinfo)
 
 
+# Seconds between writes of the diagnosis data (when kept over restarts).
+DIAGNOSIS_SAVE_DELAY = 300
+
+
 class GWNCoordinator(DataUpdateCoordinator[GWNData]):
     """Polls APs and clients of all networks.
 
@@ -177,9 +182,13 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self.last_api: datetime | None = None
         self.fast_sources: FastSources | None = None
         # Signal samples and syslog events per client, for the diagnosis panel (memory only).
-        self.history = ClientHistory(max_samples=720)
+        self.history = ClientHistory(max_samples=2000)
         self.diagnosis = DiagnosisLog()
         self.started = dt_util.utcnow()
+        self.persist_diagnosis = bool(entry.options.get(CONF_PERSIST_DIAGNOSIS, False))
+        self._diagnosis_store: Store[dict[str, Any]] = Store(
+            hass, 1, f"{DOMAIN}.{entry.entry_id}.client_diagnosis"
+        )
         # Clients removed from Home Assistant (manually or as stale); they get
         # no entities until they connect again. Persisted per config entry.
         self.removed: set[str] = set()
@@ -283,8 +292,37 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._detect_events(data)
         self.changes.update(data.clients, now)
         self.history.record(data.clients, now)
+        if self.persist_diagnosis:
+            # Throttled: the first call sets the time of the write, later ones only update the data.
+            self._diagnosis_store.async_delay_save(self._diagnosis_data, DIAGNOSIS_SAVE_DELAY)
         self._readd_removed(data)
         return data
+
+    def _diagnosis_data(self) -> dict[str, Any]:
+        return {
+            "started": self.started.isoformat(),
+            "history": self.history.dump(),
+            "diagnosis": self.diagnosis.dump(),
+        }
+
+    async def async_load_diagnosis(self) -> None:
+        """Load the saved diagnosis data, or delete it when the option is off."""
+        if not self.persist_diagnosis:
+            await self._diagnosis_store.async_remove()
+            return
+        data = await self._diagnosis_store.async_load()
+        if not isinstance(data, dict):
+            return
+        now = dt_util.utcnow()
+        self.history.load(data.get("history"))
+        self.diagnosis.load(data.get("diagnosis"), now)
+        if (started := dt_util.parse_datetime(str(data.get("started")))) and started < self.started:
+            self.started = started
+
+    async def async_save_diagnosis(self) -> None:
+        """Write the diagnosis data now (when the entry is unloaded)."""
+        if self.persist_diagnosis:
+            await self._diagnosis_store.async_save(self._diagnosis_data())
 
     async def async_load_removed(self) -> None:
         self.removed = set(await self._removed_store.async_load() or [])

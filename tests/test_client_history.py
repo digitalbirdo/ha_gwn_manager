@@ -58,3 +58,17 @@ def test_limits():
 
 def test_unknown_client_empty():
     assert ClientHistory().get(PHONE) == {"samples": [], "events": []}
+
+
+def test_dump_and_load_roundtrip_with_limit():
+    h = ClientHistory()
+    for i in range(10):
+        h.record({PHONE: c(rssi=-60 - i)}, at(i * 20))
+    h.record({PHONE: c(ap="B")}, at(300))
+    restored = ClientHistory()
+    restored.load(h.dump(max_samples=4))
+    got = restored.get(PHONE)
+    assert got["samples"] == h.get(PHONE)["samples"][-4:]
+    assert got["events"] == h.get(PHONE)["events"]
+    restored.load({"samples": "junk", "events": None})
+    assert restored.get(PHONE) == got

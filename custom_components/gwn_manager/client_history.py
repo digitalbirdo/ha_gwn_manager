@@ -52,6 +52,28 @@ class ClientHistory:
             "events": list(self._events.get(mac, ())),
         }
 
+    def dump(self, max_samples: int = 500) -> dict[str, dict[str, list[dict[str, Any]]]]:
+        """Samples (the latest max_samples per client) and events, for saving."""
+        return {
+            "samples": {mac: list(items)[-max_samples:] for mac, items in self._samples.items() if items},
+            "events": {mac: list(items) for mac, items in self._events.items() if items},
+        }
+
+    def load(self, data: Any) -> None:
+        """Take over saved data; anything that isn't in the expected shape is ignored."""
+        if not isinstance(data, dict):
+            return
+        for key, store, limit in (
+            ("samples", self._samples, self._max_samples),
+            ("events", self._events, self._max_events),
+        ):
+            saved = data.get(key)
+            if not isinstance(saved, dict):
+                continue
+            for mac, items in saved.items():
+                if isinstance(items, list):
+                    store[mac] = deque((i for i in items if isinstance(i, dict) and "t" in i), maxlen=limit)
+
     def _note_event(
         self,
         mac: str,

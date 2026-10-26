@@ -50,6 +50,10 @@ async def async_own_addresses(hass: HomeAssistant) -> set[str]:
     }
 # Changes arriving within this time are published together.
 DEBOUNCE = 1.0
+# While a client's diagnosis panel is open, that client is polled this often (a request
+# keeps the live polling going for LIVE_FOR).
+LIVE_INTERVAL = 2.0
+LIVE_FOR = timedelta(seconds=20)
 # Devices without usable SNMP are asked again after this time.
 REDETECT = timedelta(minutes=10)
 
@@ -75,6 +79,8 @@ class FastSources:
         self._engine: Any = None
         self._pollers: dict[str, SnmpPoller] = {}  # device MAC -> poller
         self._undetected: dict[str, Any] = {}  # device MAC -> time of the failed detection
+        self._live: dict[str, datetime] = {}  # client MAC -> last request for live polling
+        self._live_task: asyncio.Task | None = None
         self.stats: Counter[str] = Counter()
         self.syslog_by_device: Counter[str] = Counter()
         self.snmp_errors: Counter[str] = Counter()
@@ -135,6 +141,11 @@ class FastSources:
             )
 
     async def async_stop(self) -> None:
+        if self._live_task is not None:
+            self._live_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._live_task
+            self._live_task = None
         if self._transport is not None:
             self._transport.close()
             self._transport = None
@@ -249,6 +260,58 @@ class FastSources:
             self.last_snmp = dt_util.utcnow()
         if changed:
             self._schedule_update()
+
+    def live_active(self, mac: str) -> bool:
+        return (
+            mac in self._live
+            and dt_util.utcnow() - self._live[mac] <= LIVE_FOR
+            and self._live_task is not None
+        )
+
+    @callback
+    def request_live(self, mac: str) -> bool:
+        """Poll this client every LIVE_INTERVAL for the next LIVE_FOR; False without SNMP."""
+        if not self.snmp_enabled or not self._pollers:
+            return False
+        self._live[mac] = dt_util.utcnow()
+        if self._live_task is None or self._live_task.done():
+            self._live_task = self.entry.async_create_background_task(
+                self.hass, self._live_loop(), f"{DOMAIN} live SNMP"
+            )
+        return True
+
+    async def _live_loop(self) -> None:
+        while True:
+            now = dt_util.utcnow()
+            self._live = {mac: at for mac, at in self._live.items() if now - at <= LIVE_FOR}
+            if not self._live:
+                return
+            for mac in list(self._live):
+                try:
+                    await self._poll_live(mac)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _LOGGER.exception("Live SNMP poll of %s failed", mac)
+            await asyncio.sleep(LIVE_INTERVAL)
+
+    async def _poll_live(self, mac: str) -> None:
+        """Read the client from its access point, or else from the other devices."""
+        client = (self.coordinator.data.clients if self.coordinator.data else {}).get(mac) or {}
+        current = (client.get("apId") or "").upper()
+        order = sorted(self._pollers, key=lambda device: device != current)
+        started = dt_util.utcnow()
+        for device in order:
+            try:
+                found = await self._pollers[device].poll_client(mac)
+            except SnmpUnavailable:
+                continue
+            if found is not None:
+                if self.coordinator.fast and self.coordinator.fast.apply_snmp(
+                    device, {mac: found}, dt_util.utcnow(), started
+                ):
+                    self._schedule_update()
+                return
 
     async def _detect_devices(self) -> None:
         aps = self.coordinator.data.aps if self.coordinator.data else {}

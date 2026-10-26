@@ -70,6 +70,26 @@ class DiagnosisLog:
             return [dict(e) for e in events]
         return [dict(e) for e in events if _time(e.get("t_last") or e["t"]) >= since]
 
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return {mac: [dict(e) for e in events] for mac, events in self._events.items() if events}
+
+    def load(self, data: Any, now: datetime) -> None:
+        """Take over saved events (older than max_age and broken entries are left out)."""
+        if not isinstance(data, dict):
+            return
+        for mac, events in data.items():
+            if not isinstance(events, list):
+                continue
+            kept: deque[dict[str, Any]] = deque(maxlen=self._max_events)
+            for event in events:
+                try:
+                    if isinstance(event, dict) and "type" in event and now - _time(event["t"]) <= self._max_age:
+                        kept.append(event)
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if kept:
+                self._events[mac] = kept
+
     def forget(self, mac: str) -> None:
         self._events.pop(mac, None)
 
