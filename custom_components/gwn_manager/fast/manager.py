@@ -79,6 +79,8 @@ class FastSources:
         self.syslog_by_device: Counter[str] = Counter()
         self.snmp_errors: Counter[str] = Counter()
         self.last_syslog: str | None = None
+        # Last syslog event that only arrives at level debug (the diagnosis needs them).
+        self.debug_seen: datetime | None = None
         # Last SNMP round with at least one answering device, and its result.
         self.last_snmp: datetime | None = None
         self.snmp_ok = 0
@@ -173,6 +175,28 @@ class FastSources:
             return
         self.syslog_by_device[device] += 1
         self.last_syslog = dt_util.utcnow().isoformat()
+        # The debug JSON events (gseventlog) don't pair up with the hostapd lines: leave them out.
+        if event.kind == "diag" or (event.kind in ("connected", "disconnected") and not event.debug):
+            self.coordinator.diagnosis.add(
+                event.client_mac,
+                {
+                    "type": event.diag or event.kind,
+                    "ap": device,
+                    "ifname": event.ifname,
+                    "bssid": event.bssid,
+                    "from_bssid": event.from_bssid,
+                    "reason_code": event.reason_code,
+                    "status_code": event.status_code,
+                    "result": event.result,
+                    "snr": event.snr,
+                    "detail": event.detail,
+                    "rssi": event.rssi,
+                    "channel": event.channel,
+                },
+                dt_util.utcnow(),
+            )
+            if event.debug:
+                self.debug_seen = dt_util.utcnow()
         if self.coordinator.fast and self.coordinator.fast.apply_syslog(device, event, dt_util.utcnow()):
             self._schedule_update()
 

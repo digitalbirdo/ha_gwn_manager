@@ -29,7 +29,9 @@ custom_components/gwn_manager/
   logbook.py        Logbook texts for the client events
   diagnostics.py    Diagnostics with redaction
   fast/             Optional fast sources: syslog listener, SNMP pollers, overlay state
+  client_history.py client_diagnosis.py   Signal samples and syslog events per client; roaming/drop-out statistics and findings (pure, tested)
   frontend/gwn-network-card.js   Network map card (plain web component, no build step)
+  frontend/gwn-client-detail.js  Connection diagnosis panel, opened by tapping a wireless client in either card
   translations/en.json, de.json
 tests/              pytest for the pure fast-source modules
 scripts/            Dev instance, onboarding, adding the integration, card screenshots
@@ -258,14 +260,11 @@ coordinates and keys, but check with `grep` for your own values before committin
 - Unit tests for the HA parts with `pytest-homeassistant-custom-component` and a mocked API
   (the pure fast-source modules already have tests in `tests/`).
 - SNMPv3 for the fast sources (USM user, auth/priv), for networks that turned v2c off.
-- Client detail panel in both cards (started): tapping a client
-  expands a panel instead of opening the device page; only the client's name links to the HA
-  device page. Shows live: AP, BSSID, band/channel, RSSI/SNR, rate, Wi-Fi mode, IP; a signal chart
-  of the last minutes from the fast sources; a roaming timeline (connected / roamed / band change /
-  disconnected, with source syslog/SNMP/API). A "live measurement" button polls only this client's
-  current AP over SNMP every ~3 s while the panel is open (`SnmpPoller.poll_client`). Backend:
-  `client_history.py` (bounded per-client samples + events, done with tests), WebSocket
-  `gwn_manager/subscribe_client`; frontend: shared module `gwn-client-detail.js`, loaded lazily.
+- Client diagnosis (done, memory only): WebSocket `gwn_manager/client_diagnostics` (mac, hours) returns current
+  values, events, samples, stats and findings; the panel polls it every 5 s. Syslog diagnostics are parsed in
+  `syslog_parse._parse_diag` (fast/slow roaming, roam away reason, disassoc, auth/assoc status, ping-pong, steering;
+  all but the first two only at syslog level debug). Open: persist the log over restarts (`Store`), faster SNMP
+  polling of the selected client (`SnmpPoller.poll_client`), per-client ping/DNS measurements.
 - mDNS names and device types (about an hour): listen passively via Home Assistant's own zeroconf
   instance (no extra traffic) for service announcements (`_esphomelib._tcp`, `_http._tcp`,
   `_airplay._tcp`, `_googlecast._tcp`, `_hap._tcp`, `_ipp._tcp`, …) and map their addresses to clients by

@@ -22,7 +22,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const TOPOLOGY_VERSION = "0.6.5";
+const TOPOLOGY_VERSION = "0.7.0";
 const RESUBSCRIBE_MS = 90_000;
 const MAX_CLIENT_ROWS = 20;
 const MAC_NAME = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
@@ -460,7 +460,7 @@ class GwnTopologyCard extends HTMLElement {
     const shortName = (name) => (MAC_NAME.test(name || "") ? `…${name.slice(-8)}` : name);
     const flashing = (c) => (this._flashUntil?.get(c.mac) ?? 0) > Date.now();
     const clientRow = (c) => `
-      <div class="client-row${flashing(c) ? (c.connected ? " flash" : " gone") : ""}" data-device="${esc(c.device_id ?? "")}" data-client-entity="${esc(c.entity_id ?? "")}">
+      <div class="client-row${flashing(c) ? (c.connected ? " flash" : " gone") : ""}" data-device="${esc(c.device_id ?? "")}" data-client-entity="${esc(c.entity_id ?? "")}" data-client-mac="${esc(c.mac)}">
         <i style="background:${c.wired ? "var(--accent)" : rssiColor(c.rssi)}"></i>
         <span class="cbody">
           <span class="cline"><span class="cname" title="${esc(c.name)}">${esc(shortName(c.name))}</span>${c.ip
@@ -692,10 +692,16 @@ class GwnTopologyCard extends HTMLElement {
         this._copy(el);
       });
     }
+    // A client opens its connection diagnosis; wired clients and old setups open the device page.
     for (const el of this.shadowRoot.querySelectorAll("[data-client-entity]")) {
       el.addEventListener("click", (event) => {
         event.stopPropagation();
-        openDevice(el);
+        const client = clients.find((c) => c.mac === el.dataset.clientMac);
+        if (!client || client.wired || !window.gwnClientDetail) return openDevice(el);
+        window.gwnClientDetail.open({
+          hass: this._hass, mac: client.mac, name: client.name, aps: devices,
+          deviceId: client.device_id, entityId: client.entity_id, entryId: net?.entry_id,
+        });
       });
     }
     for (const img of this.shadowRoot.querySelectorAll(".photo img")) {

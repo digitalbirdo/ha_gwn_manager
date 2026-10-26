@@ -23,7 +23,7 @@ from .websocket import async_register_websocket
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
-CARDS = ("gwn-network-card.js", "gwn-topology-card.js")
+CARDS = ("gwn-network-card.js", "gwn-topology-card.js", "gwn-client-detail.js")
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,

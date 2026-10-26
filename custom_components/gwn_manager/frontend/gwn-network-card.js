@@ -21,7 +21,7 @@
  *   entry_id: ...            # optional, only one GWN Manager entry
  */
 
-const VERSION = "0.6.5";
+const VERSION = "0.7.0";
 
 const RADIUS = { root: 20, ap: 15, client: 7 };
 const CHARGE = { root: 3, ap: 2.6, client: 1 };
@@ -1104,6 +1104,15 @@ class GwnNetworkCard extends HTMLElement {
   }
 
   _openMoreInfo(node) {
+    // Wireless clients open the connection diagnosis (when its script is loaded).
+    if (node.type === "client" && !node.data.wired && window.gwnClientDetail) {
+      const net = this._networks?.find((n) => n.clients?.some((c) => c.mac === node.data.mac)) || this._networks?.[0];
+      window.gwnClientDetail.open({
+        hass: this._hass, mac: node.data.mac, name: node.data.name, aps: net?.aps || [],
+        deviceId: node.data.device_id, entityId: node.data.entity_id, entryId: net?.entry_id,
+      });
+      return;
+    }
     const entityId = node.data.entity_id;
     if (!entityId) return;
     this.dispatchEvent(new CustomEvent("hass-more-info", {

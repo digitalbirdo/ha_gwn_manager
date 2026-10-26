@@ -11,9 +11,15 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar, entity_registry as er, floor_registry as fr
 
+from datetime import datetime, timedelta
+
+from homeassistant.util import dt as dt_util
+
+from .client_diagnosis import analyze, annotate, bssid_map
 from .const import DOMAIN
 from .coordinator import GWNConfigEntry
 from .entity import async_get_device, client_name
+from .fast.state import bssid_table
 from .model_image import model_image_url
 
 
@@ -21,6 +27,7 @@ from .model_image import model_image_url
 def async_register_websocket(hass: HomeAssistant) -> None:
     """Register the WebSocket commands."""
     websocket_api.async_register_command(hass, ws_subscribe_topology)
+    websocket_api.async_register_command(hass, ws_client_diagnostics)
 
 
 def _ports(ap: dict[str, Any]) -> list[dict[str, Any]]:
@@ -300,3 +307,98 @@ def ws_subscribe_topology(
     connection.subscriptions[msg["id"]] = unsubscribe
     connection.send_result(msg["id"])
     send()
+
+
+# History events of the API/SNMP level, for networks without syslog.
+_STATE_EVENT_TYPES = {"connected": "connected", "disconnected": "disconnected", "roamed": "roam_state"}
+
+
+def _state_events(events: list[dict[str, Any]], since: datetime) -> list[dict[str, Any]]:
+    return [
+        {"type": _STATE_EVENT_TYPES[e["kind"]], "t": e["t"], "ap": e.get("ap"), "band": e.get("band"),
+         "rssi": e.get("rssi"), "from_ap": e.get("from_ap"), "source": e.get("source")}
+        for e in events
+        if e["kind"] in _STATE_EVENT_TYPES and datetime.fromisoformat(e["t"]) >= since
+    ]
+
+
+@callback
+def _client_diagnostics(entry: GWNConfigEntry, mac: str, hours: float) -> dict[str, Any]:
+    """Statistics, findings, events and signal samples of one client."""
+    coordinator = entry.runtime_data
+    now = dt_util.utcnow()
+    since = now - timedelta(hours=hours)
+    history = coordinator.history.get(mac)
+    samples = [s for s in history["samples"] if datetime.fromisoformat(s["t"]) >= since]
+    events = coordinator.diagnosis.get(mac, since)
+    source = "syslog"
+    if not events:
+        events, source = _state_events(history["events"], since), "state"
+    bssids = bssid_map(coordinator.data.aps, bssid_table)
+    events = annotate(events, samples, bssids)
+    fast = coordinator.fast_sources
+    syslog_on = bool(fast and fast.syslog_enabled)
+    blind = (
+        {ap for ap in coordinator.data.aps if not fast.syslog_by_device[ap]} if syslog_on and fast else set()
+    )
+    client = coordinator.data.clients.get(mac) or {}
+    current_ap = (client.get("apId") or "").upper() or None
+    result = analyze(
+        events,
+        samples,
+        now,
+        debug_events=bool(fast and fast.debug_seen and now - fast.debug_seen < timedelta(hours=1)),
+        blind_aps=blind,
+        current_ap=current_ap,
+    )
+    last = next((e for e in reversed(events) if e["type"] in ("roam_fast", "roam_init")), None)
+    return {
+        "mac": mac,
+        "now": now.isoformat(),
+        "since": since.isoformat(),
+        "hours": hours,
+        "source": source,
+        "collecting_since": coordinator.started.isoformat(),
+        "syslog": syslog_on,
+        "debug_events": bool(fast and fast.debug_events),
+        "current": {
+            "connected": bool(client.get("connected")),
+            "ap": current_ap,
+            "bssid": client.get("bssid"),
+            "ssid": client.get("ssid"),
+            "band": client.get("channelClassStr"),
+            "channel": client.get("channel"),
+            "rssi": client.get("rssi"),
+            "snr": client.get("snr"),
+            "tx_rate": client.get("txRate"),
+            "rx_rate": client.get("rxRate"),
+            "sta_mode": client.get("staMode"),
+            "ip": client.get("ipv4"),
+            "source": client.get("fastSource") or "api",
+            "last_roam": last["type"] if last else None,
+        },
+        "events": events,
+        "samples": samples,
+        **result,
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "gwn_manager/client_diagnostics",
+        vol.Required("mac"): str,
+        vol.Optional("entry_id"): str,
+        vol.Optional("hours", default=24): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=168)),
+    }
+)
+@callback
+def ws_client_diagnostics(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Roaming and connection diagnosis of one client."""
+    mac = msg["mac"].upper()
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        if msg.get("entry_id") in (None, entry.entry_id) and mac in entry.runtime_data.data.clients:
+            connection.send_result(msg["id"], _client_diagnostics(entry, mac, msg["hours"]))
+            return
+    connection.send_error(msg["id"], "not_found", "Unknown client")

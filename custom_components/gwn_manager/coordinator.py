@@ -23,6 +23,8 @@ from homeassistant.util import dt as dt_util
 from .api import GWNAuthError, GWNClient, GWNError
 from .changes import ChangeTracker
 from .cleanup import is_stale
+from .client_diagnosis import DiagnosisLog
+from .client_history import ClientHistory
 from .fast.state import FastState, apply_overlay, bssid_table
 
 if TYPE_CHECKING:
@@ -174,6 +176,10 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         # Time of the last successful API poll, shown in the cards.
         self.last_api: datetime | None = None
         self.fast_sources: FastSources | None = None
+        # Signal samples and syslog events per client, for the diagnosis panel (memory only).
+        self.history = ClientHistory(max_samples=720)
+        self.diagnosis = DiagnosisLog()
+        self.started = dt_util.utcnow()
         # Clients removed from Home Assistant (manually or as stale); they get
         # no entities until they connect again. Persisted per config entry.
         self.removed: set[str] = set()
@@ -276,6 +282,7 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
         self._apply_manual_uplinks(data)
         self._detect_events(data)
         self.changes.update(data.clients, now)
+        self.history.record(data.clients, now)
         self._readd_removed(data)
         return data
 

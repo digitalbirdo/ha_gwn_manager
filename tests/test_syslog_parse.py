@@ -56,3 +56,59 @@ def test_noise_returns_none():
     assert parse_syslog_line(HEAD + "receive nbr msg roam cache update for sta 4e:ef:65:00:00:01") is None
     assert parse_syslog_line("") is None
     assert parse_syslog_line("\xff garbage") is None
+
+
+# Diagnostic lines (real formats, made-up MACs).
+HEAD_DBG = "<31>Oct 25 15:04:24 GWN7665[ec74d7000001][1.0.27.20][AP OG] daemon.debug: controller: "
+P = "4e:ef:65:00:00:01"
+
+
+def test_fast_roaming_without_debug():
+    e = parse_syslog_line(HEAD + f"sta {P} 80211r fast roaming: ec:74:d7:00:00:26 --> ec:74:d7:00:00:aa")
+    assert (e.kind, e.diag, e.client_mac, e.from_bssid, e.bssid, e.debug) == (
+        "diag", "roam_fast", "4E:EF:65:00:00:01", "EC:74:D7:00:00:26", "EC:74:D7:00:00:AA", False)
+
+
+def test_init_assoc_roam():
+    e = parse_syslog_line(HEAD + f"sta {P} 80211r init assoc: 00:00:00:00:00:00 --> ec:74:d7:00:00:f9")
+    assert (e.diag, e.from_bssid, e.bssid) == ("roam_init", "00:00:00:00:00:00", "EC:74:D7:00:00:F9")
+
+
+def test_roaming_away_has_reason_and_interface():
+    e = parse_syslog_line(HEAD + f"gs_sta_roaming_away: addr={P}, if=ath3, reason_code=201")
+    assert (e.diag, e.client_mac, e.ifname, e.reason_code) == ("roam_away", "4E:EF:65:00:00:01", "ath3", 201)
+
+
+def test_debug_diagnostics_only_when_enabled():
+    line = HEAD_DBG + f"log_parse: network-health-revice:{P} disassociation received  1792936823 801937"
+    assert parse_syslog_line(line) is None
+    e = parse_syslog_line(line, debug_events=True)
+    assert (e.kind, e.diag, e.client_mac, e.debug) == ("diag", "disassoc", "4E:EF:65:00:00:01", True)
+
+
+def test_auth_and_assoc_status_only_when_not_zero():
+    ok = HEAD_DBG + f"log_parse: network-health-revice:{P} send auth reply status_code 0 1792936823"
+    assert parse_syslog_line(ok, debug_events=True) is None
+    bad = HEAD_DBG + f"log_parse: network-health-revice:{P} send assoc resp status_code 17 1792936823"
+    e = parse_syslog_line(bad, debug_events=True)
+    assert (e.diag, e.status_code) == ("assoc_fail", 17)
+    bad = HEAD_DBG + f"log_parse: network-health-revice:{P} send auth reply status_code 1 1792936823"
+    assert parse_syslog_line(bad, debug_events=True).diag == "auth_fail"
+
+
+def test_pingpong_and_roam_statistics():
+    e = parse_syslog_line(HEAD_DBG + f"count_roam_info_for_client: network_health {P} PINGPONG_ROAM", debug_events=True)
+    assert (e.diag, e.client_mac) == ("pingpong", "4E:EF:65:00:00:01")
+    zero = HEAD_DBG + f"count_roam_info_for_client: network_health_roam_statics {P} QUALITY_FAILED 0 STABILITY_FAILED 0 LATENCY_FAILED 0"
+    assert parse_syslog_line(zero, debug_events=True) is None
+    e = parse_syslog_line(zero.replace("QUALITY_FAILED 0", "QUALITY_FAILED 2"), debug_events=True)
+    assert (e.diag, e.detail) == ("roam_stats", "quality=2 stability=0 latency=0")
+
+
+def test_steering_request_and_response():
+    req = "<15>Oct 25 15:00:05 GWN7665[ec74d7000001][1.0.27.20][AP EG] user.debug: : gsdcs - dcs_cmn_handle_steer_req: Received steer request from AP ec:74:d7:00:00:24 for STA " + P + ", steer type STICKY, STA type BTM, RSSI 19, channel 40, ssid Finkennest"
+    e = parse_syslog_line(req, debug_events=True)
+    assert (e.diag, e.client_mac, e.snr, e.channel, e.detail) == ("steer_req", "4E:EF:65:00:00:01", 19, 40, "STICKY BTM")
+    resp = "<15>Oct 25 15:00:05 GWN7665[ec74d7000001][1.0.27.20][AP EG] user.debug: : gsdcs - dcs_send_steer_resp: Send steer response to AP ec:74:d7:00:00:24, for STA " + P + " result code NO CANDIDATE, steer type STICKY, STA type BTM,channel 255, channel utilization 255"
+    e = parse_syslog_line(resp, debug_events=True)
+    assert (e.diag, e.result, e.detail) == ("steer_resp", "NO CANDIDATE", "STICKY BTM")
