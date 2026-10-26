@@ -10,7 +10,7 @@ from fast.syslog import parse_forward_targets, start_syslog
 
 def test_parse_targets():
     assert parse_forward_targets("192.0.2.3:5514") == [("192.0.2.3", 5514)]
-    assert parse_forward_targets("192.0.2.3:5514, 192.168.1.9:514\n10.0.0.4:6000") == [
+    assert parse_forward_targets("192.0.2.3:5514, 192.168.1.9:514\n192.0.2.4:6000") == [
         ("192.0.2.3", 5514), ("192.168.1.9", 514), ("192.0.2.4", 6000)]
     assert parse_forward_targets("") == []
     assert parse_forward_targets(None) == []
