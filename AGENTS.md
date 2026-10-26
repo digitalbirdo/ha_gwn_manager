@@ -149,6 +149,13 @@ Notes:
 - Options: `POST /api/config/config_entries/options/flow {"handler": "<entry_id>"}`.
 - Diagnostics: `GET /api/diagnostics/config_entry/<entry_id>` (secrets must be redacted).
 
+### Probing the API rate limit
+
+`scripts/rate-limit-test.py` sends a read-only signed request (network list) at increasing rates
+and reports per rate the successes, error `retCode`s / HTTP statuses and latency:
+`GWN_URL=… GWN_APP_ID=… GWN_APP_SECRET=… python scripts/rate-limit-test.py --rates 1,2,5,10,20`.
+Use a separate App ID so a lockout doesn't hit the running integration.
+
 ### Testing the card in a browser
 
 ```sh

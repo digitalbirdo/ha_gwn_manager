@@ -654,12 +654,18 @@ class GWNCoordinator(DataUpdateCoordinator[GWNData]):
                     time_zone = None
                 self._time_zones[network_id] = time_zone
             time_zone = self._time_zones[network_id]
-            data.networks[network_id] = time_zone
 
             network_aps: dict[str, dict[str, Any]] = {}
             for ap in await self.client.get_access_points(network_id):
                 if mac := (ap.get("mac") or "").upper():
                     network_aps[mac] = {**ap, "networkName": network.get("networkName")}
+            if not network_aps:
+                # Without devices the network has nothing to show: its SSIDs and client
+                # history (e.g. a GWN.Cloud account whose devices are managed locally)
+                # would only duplicate the entities of another entry.
+                _LOGGER.debug("Network %s has no devices, skipping it", network_id)
+                continue
+            data.networks[network_id] = time_zone
             details = await asyncio.gather(
                 *(self.client.get_device_details(mac) for mac in network_aps),
                 return_exceptions=True,
