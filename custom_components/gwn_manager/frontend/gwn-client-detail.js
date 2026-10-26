@@ -134,10 +134,12 @@
   .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
   .sheet { position: relative; box-sizing: border-box; width: min(760px, 100%); max-height: 100%; overflow: auto; margin-top: 3vh;
     background: var(--bg); color: var(--text); border-radius: 14px; padding: 16px 18px 20px; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
-  @media (max-width: 640px) { .sheet { margin: 0; border-radius: 0; height: 100%; } }
+  @media (max-width: 640px) { .sheet { margin: 0; border-radius: 0; height: 100%; padding-top: 0; } }
   .dark { --bg: #111a2b; --card: #17233a; --text: #e6edf7; --muted: #8fa1bd; --line: #2a3a58; --accent: #38c6e8; --ok: #3ee08f; --warn: #f5c542; --bad: #ff6b6b; }
   .light { --bg: #fff; --card: #f1f4f9; --text: #1b2433; --muted: #5d6b82; --line: #d5dce8; --accent: #0a7fa6; --ok: #1a9d5b; --warn: #b8860b; --bad: #d23a3a; }
-  header { display: flex; gap: 10px; align-items: center; }
+  header { display: flex; gap: 10px; align-items: center; position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 4px 0 8px; }
+  @media (max-width: 640px) { header { padding-top: max(env(safe-area-inset-top, 0px), 48px); } }
+  .closing { margin-top: 18px; text-align: center; padding-bottom: env(safe-area-inset-bottom, 0px); }
   header h2 { margin: 0; font-size: 18px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   header small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
   button { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
@@ -246,11 +248,12 @@
           </div>
           ${this._error ? `<p class="note">${esc(this._error)}</p>` : ""}
           ${d ? this._body(d) : `<p class="note">…</p>`}
+          <div class="closing"><button data-close>${esc(t.close)}</button></div>
         </div>`;
       const root = this.shadowRoot;
       root.querySelector(".sheet").scrollTop = scroll;
       root.querySelector(".scrim").addEventListener("click", () => this.close());
-      root.querySelector("[data-close]").addEventListener("click", () => this.close());
+      for (const button of root.querySelectorAll("[data-close]")) button.addEventListener("click", () => this.close());
       root.querySelector("[data-device]")?.addEventListener("click", () => this._openDevice());
       for (const button of root.querySelectorAll("[data-hours]")) {
         button.addEventListener("click", () => {
