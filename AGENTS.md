@@ -155,6 +155,9 @@ Notes:
 and reports per rate the successes, error `retCode`s / HTTP statuses and latency:
 `GWN_URL=… GWN_APP_ID=… GWN_APP_SECRET=… python scripts/rate-limit-test.py --rates 1,2,5,10,20`.
 Use a separate App ID so a lockout doesn't hit the running integration.
+Result for GWN.Cloud (eu, 2026-10): no rate limit up to 20 requests/s; from ~10/s a few answers
+(1–3 %) carry `{"retCode":50004,"msg":"Service error"}` glued behind the valid JSON. `api.py`
+reports those as `GWNConnectionError` (invalid response) instead of crashing.
 
 ### Testing the card in a browser
 

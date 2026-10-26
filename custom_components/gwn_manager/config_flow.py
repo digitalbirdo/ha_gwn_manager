@@ -105,6 +105,9 @@ class GWNConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            # Copy & paste often brings leading/trailing spaces along.
+            for key in (CONF_SERVER_URL, CONF_APP_ID, CONF_APP_SECRET):
+                user_input[key] = user_input[key].strip()
             user_input[CONF_SERVER_URL] = user_input[CONF_SERVER_URL].rstrip("/")
             host = urlparse(user_input[CONF_SERVER_URL]).netloc or user_input[CONF_SERVER_URL]
             await self.async_set_unique_id(f"{host}_{user_input[CONF_APP_ID]}")
@@ -143,7 +146,7 @@ class GWNConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            data = {**entry.data, CONF_APP_SECRET: user_input[CONF_APP_SECRET]}
+            data = {**entry.data, CONF_APP_SECRET: user_input[CONF_APP_SECRET].strip()}
             if not (errors := await _validate(self.hass, data)):
                 return self.async_update_reload_and_abort(entry, data=data)
 

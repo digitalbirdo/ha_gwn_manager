@@ -51,9 +51,9 @@ class GWNClient:
         secret_key: str,
     ) -> None:
         self._session = session
-        self._base_url = base_url.rstrip("/")
-        self._app_id = app_id
-        self._secret_key = secret_key
+        self._base_url = base_url.strip().rstrip("/")
+        self._app_id = app_id.strip()
+        self._secret_key = secret_key.strip()
         self._access_token: str | None = None
         self._token_expiry = 0.0
         self._auth_lock = asyncio.Lock()
@@ -135,11 +135,16 @@ class GWNClient:
                 if resp.status in (401, 403):
                     raise GWNAuthError(f"Request rejected (HTTP {resp.status})")
                 resp.raise_for_status()
-                data = await resp.json(content_type=None)
+                text = await resp.text()
         except GWNError:
             raise
         except (aiohttp.ClientError, TimeoutError) as err:
             raise GWNConnectionError(f"Request to {endpoint} failed: {err}") from err
+        try:
+            data = json.loads(text)
+        except ValueError as err:
+            # Seen on GWN.Cloud under load: a valid answer followed by extra data.
+            raise GWNConnectionError(f"Invalid response from {endpoint}: {text[:300]!r}") from err
 
         ret_code = (data or {}).get("retCode")
         if ret_code != 0:

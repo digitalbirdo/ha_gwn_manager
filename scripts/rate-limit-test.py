@@ -46,7 +46,9 @@ async def one_request(client: api.GWNClient) -> tuple[str, float]:
     except api.GWNConnectionError as err:
         cause = err.__cause__
         status = getattr(cause, "status", None)
-        result = f"HTTP {status}" if status else f"connection: {cause or err}"
+        result = f"HTTP {status}" if status else f"connection: {err}"
+    except Exception as err:  # noqa: BLE001 - report everything the API does
+        result = f"{type(err).__name__}: {err}"
     return result, time.monotonic() - start
 
 
