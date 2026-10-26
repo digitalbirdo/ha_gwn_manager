@@ -21,13 +21,13 @@ def test_freed_has_bssid():
 
 
 def test_dhcpack_with_hostname():
-    e = parse_syslog_line("<30>Oct 25 13:14:47 GWN7062[ec74d7000009][1.0.9.58] daemon.info: dnsmasq-dhcp[1]: DHCPACK(br-lan) 10.0.0.9 4e:ef:65:00:00:01 iPhone")
-    assert (e.kind, e.ip, e.hostname, e.device_tag) == ("dhcp", "10.0.0.9", "iPhone", "EC74D7000009")
+    e = parse_syslog_line("<30>Oct 25 13:14:47 GWN7062[ec74d7000009][1.0.9.58] daemon.info: dnsmasq-dhcp[1]: DHCPACK(br-lan) 192.0.2.9 4e:ef:65:00:00:01 iPhone")
+    assert (e.kind, e.ip, e.hostname, e.device_tag) == ("dhcp", "192.0.2.9", "iPhone", "EC74D7000009")
 
 
 def test_dhcpack_without_hostname():
-    e = parse_syslog_line("<30>Oct 25 13:14:47 GWN7062[ec74d7000009][1.0.9.58] daemon.info: dnsmasq-dhcp[1]: DHCPACK(br-lan) 10.0.0.9 4e:ef:65:00:00:01")
-    assert (e.ip, e.hostname) == ("10.0.0.9", None)
+    e = parse_syslog_line("<30>Oct 25 13:14:47 GWN7062[ec74d7000009][1.0.9.58] daemon.info: dnsmasq-dhcp[1]: DHCPACK(br-lan) 192.0.2.9 4e:ef:65:00:00:01")
+    assert (e.ip, e.hostname) == ("192.0.2.9", None)
 
 
 GSEVENT = '<15>Oct 25 13:14:47 GWN7665[ec74d7000001][1.0.27.20][AP X] daemon.debug: controller: process_send_events: gseventlog send '
@@ -42,8 +42,8 @@ def test_gseventlog_connect_only_when_enabled():
 
 
 def test_gseventlog_info_and_disconnect():
-    info = parse_syslog_line(GSEVENT + '{ "event_content": { "client_mac": "4eef65000001", "os": "iOS", "hostname": "iPhone", "ipv4": "10.0.0.9" } }', debug_events=True)
-    assert (info.kind, info.hostname, info.os, info.ip) == ("info", "iPhone", "iOS", "10.0.0.9")
+    info = parse_syslog_line(GSEVENT + '{ "event_content": { "client_mac": "4eef65000001", "os": "iOS", "hostname": "iPhone", "ipv4": "192.0.2.9" } }', debug_events=True)
+    assert (info.kind, info.hostname, info.os, info.ip) == ("info", "iPhone", "iOS", "192.0.2.9")
     gone = parse_syslog_line(GSEVENT + '{ "event_content": { "client_mac": "4eef65000001", "ap_mac": "ec74d7000001", "ssid": "S" }, "event_subtype": 0 }', debug_events=True)
     assert (gone.kind, gone.ap_mac) == ("disconnected", "EC:74:D7:00:00:01")
 

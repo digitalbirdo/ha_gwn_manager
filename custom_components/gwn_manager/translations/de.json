@@ -67,13 +67,13 @@
           "snmp_community": "Lese-Community aus dem GWN Manager.",
           "snmp_interval": "Pause zwischen zwei SNMP-Runden; eine Runde über alle Geräte dauert etwa 10–15 s.",
           "remove_after_days": "Clients, die länger nicht verbunden waren, werden samt Entitäten aus Home Assistant entfernt und kommen zurück, sobald sie sich wieder verbinden. 0 = nie. Nicht verbundene Clients lassen sich auch auf ihrer Geräteseite von Hand löschen.",
-          "syslog_forward": "Jede empfangene Syslog-Meldung unverändert zusätzlich an diese Adressen senden, z. B. um denselben Datenstrom mit einem anderen Werkzeug oder einem zweiten Home Assistant auszuwerten. IPv4-Adressen mit Port, durch Komma getrennt, z. B. 10.0.0.3:5514 (keine Hostnamen). Setzt die schnelle Aktualisierung per Syslog voraus."
+          "syslog_forward": "Jede empfangene Syslog-Meldung unverändert zusätzlich an diese Adressen senden, z. B. um denselben Datenstrom mit einem anderen Werkzeug oder einem zweiten Home Assistant auszuwerten. IPv4-Adressen mit Port, durch Komma getrennt, z. B. 192.0.2.3:5514 (keine Hostnamen). Setzt die schnelle Aktualisierung per Syslog voraus."
         },
         "description": "Syslog und SNMP schaltest du im GWN Manager unter den Systemeinstellungen ein: {settings_url}"
       }
     },
     "error": {
-      "invalid_forward": "IPv4-Adressen mit Port eingeben, z. B. 10.0.0.3:5514, durch Komma getrennt; nicht dieses Home Assistant selbst (Loopback, eigene Adressen) auf dem Empfangsport."
+      "invalid_forward": "IPv4-Adressen mit Port eingeben, z. B. 192.0.2.3:5514, durch Komma getrennt; nicht dieses Home Assistant selbst (Loopback, eigene Adressen) auf dem Empfangsport."
     }
   },
   "entity": {

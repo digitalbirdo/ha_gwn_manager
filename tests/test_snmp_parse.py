@@ -11,12 +11,12 @@ def test_columns_match_mibs():
 
 def test_ap_rows_snr_to_rssi():
     cols = {
-        "mac": {"1": "aa:bb:cc:00:00:01"}, "ip": {"1": "10.0.0.5"}, "bssid": {"1": "ec:74:d7:00:00:ab"},
+        "mac": {"1": "aa:bb:cc:00:00:01"}, "ip": {"1": "192.0.2.5"}, "bssid": {"1": "ec:74:d7:00:00:ab"},
         "ssid": {"1": "Home"}, "signal": {"1": "34"}, "hostname": {"1": "phone"}, "rate": {"1": "600"},
     }
     c = build_clients(MibVariant.AP, cols)["AA:BB:CC:00:00:01"]
     assert (c.snr, c.rssi, c.rate, c.bssid, c.ip, c.ssid, c.hostname, c.band) == (
-        34, -61, 600, "EC:74:D7:00:00:AB", "10.0.0.5", "Home", "phone", None)
+        34, -61, 600, "EC:74:D7:00:00:AB", "192.0.2.5", "Home", "phone", None)
 
 
 def test_router_mac_without_colons_and_dbm():

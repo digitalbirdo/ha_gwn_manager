@@ -9,16 +9,16 @@ from fast.syslog import parse_forward_targets, start_syslog
 
 
 def test_parse_targets():
-    assert parse_forward_targets("10.0.0.3:5514") == [("10.0.0.3", 5514)]
-    assert parse_forward_targets("10.0.0.3:5514, 192.168.1.9:514\n10.0.0.4:6000") == [
-        ("10.0.0.3", 5514), ("192.168.1.9", 514), ("10.0.0.4", 6000)]
+    assert parse_forward_targets("192.0.2.3:5514") == [("192.0.2.3", 5514)]
+    assert parse_forward_targets("192.0.2.3:5514, 192.168.1.9:514\n10.0.0.4:6000") == [
+        ("192.0.2.3", 5514), ("192.168.1.9", 514), ("192.0.2.4", 6000)]
     assert parse_forward_targets("") == []
     assert parse_forward_targets(None) == []
-    assert parse_forward_targets("10.0.0.3:5514, 10.0.0.3:5514") == [("10.0.0.3", 5514)]
+    assert parse_forward_targets("192.0.2.3:5514, 192.0.2.3:5514") == [("192.0.2.3", 5514)]
 
 
-@pytest.mark.parametrize("bad", ["10.0.0.3", "10.0.0.3:0", "10.0.0.3:70000", "10.0.0.3:abc",
-                                 "example.com:514", "10.0.0.3:5514:1", ":514", "999.1.1.1:514"])
+@pytest.mark.parametrize("bad", ["192.0.2.3", "192.0.2.3:0", "192.0.2.3:70000", "192.0.2.3:abc",
+                                 "example.com:514", "192.0.2.3:5514:1", ":514", "999.1.1.1:514"])
 def test_parse_rejects_bad_targets(bad):
     with pytest.raises(ValueError):
         parse_forward_targets(bad)
@@ -89,13 +89,13 @@ def test_unreachable_target_does_not_break_receiving():
 
 
 def test_parse_rejects_own_addresses_of_the_host():
-    own = {"10.0.0.3", "172.30.32.1"}
-    for bad in ("10.0.0.3:5514", "172.30.32.1:5514"):
+    own = {"192.0.2.3", "172.30.32.1"}
+    for bad in ("192.0.2.3:5514", "172.30.32.1:5514"):
         with pytest.raises(ValueError):
             parse_forward_targets(bad, own_port=5514, own_addresses=own)
     # other port or other host is fine
-    assert parse_forward_targets("10.0.0.3:5515, 10.0.0.2:5514", own_port=5514, own_addresses=own) == [
-        ("10.0.0.3", 5515), ("10.0.0.2", 5514)]
+    assert parse_forward_targets("192.0.2.3:5515, 192.0.2.2:5514", own_port=5514, own_addresses=own) == [
+        ("192.0.2.3", 5515), ("192.0.2.2", 5514)]
 
 
 def test_never_forwarded_back_to_the_sender():

@@ -54,7 +54,7 @@ def test_connected():
 
 def test_disconnected(): ...  # AP-STA-DISCONNECTED -> kind "disconnected"
 def test_freed_has_bssid(): ...  # "Sta is freed: sta=..., bssid=ec:74:..:ab, if=ath3" -> disconnected, bssid set
-def test_dhcpack_with_hostname(): ...  # "DHCPACK(br-lan) 10.0.0.9 4e:..:01 iPhone" -> dhcp, ip, hostname "iPhone"
+def test_dhcpack_with_hostname(): ...  # "DHCPACK(br-lan) 192.0.2.9 4e:..:01 iPhone" -> dhcp, ip, hostname "iPhone"
 def test_dhcpack_without_hostname(): ...  # hostname None
 def test_gseventlog_connect_only_when_enabled():
     line = '<15>... GWN7665[ec74d7000001][1.0.27.20][AP X] daemon.debug: controller: process_send_events: gseventlog send { "event_content": { "client_mac": "4eef65000001", "ap_mac": "ec74d7000001", "ssid": "S", "status": 1, "channel": 85, "rssi": -66, "tx_rate": 432, "rx_rate": 432, "new_sta_mode": "11AXA_HE80", "frequency band": 6 }, "event_subtype": 1 }'
