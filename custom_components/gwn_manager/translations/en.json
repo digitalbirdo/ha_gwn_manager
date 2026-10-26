@@ -73,7 +73,7 @@
       }
     },
     "error": {
-      "invalid_forward": "Enter IPv4 addresses with port like 10.0.0.3:5514, separated by commas; not this receiver's own port."
+      "invalid_forward": "Enter IPv4 addresses with port like 10.0.0.3:5514, separated by commas; not this Home Assistant itself (loopback, its own addresses) on the receiving port."
     }
   },
   "entity": {

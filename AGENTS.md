@@ -94,7 +94,10 @@ expire after `fast_max_age`, then the API wins again. `async_fast_update()` publ
   ~40 lines/s at notice, ~150/s at debug – keep the substring pre-filter cheap.
 - Forwarding (`syslog_forward`, `fast/syslog.py`): `SyslogProtocol` sends each datagram unchanged to the
   `ip:port` targets right after receiving (non-blocking UDP socket, errors only counted). IPv4 literals
-  only (no blocking name resolution); a loopback/wildcard target on the own port is refused (loop).
+  only (no blocking name resolution). Loop guards: a target that is this host itself (loopback, wildcard or
+  one of its own addresses from `network.async_get_adapters`) on the own port is refused in the form and
+  ignored at start; and a datagram is never forwarded to the address it came from (`forward_skipped_loop`),
+  which ends any ping-pong between two hosts. Rings over three or more hosts can't be detected.
 - SNMP v2c (`fast/snmp.py`): enterprise 42397. APs (GWN76xx) client table `…42397.1.1.3.3.1`
   (2 MAC, 4 BSSID, 6 SNR dB, 11 rate), routers (GWN70xx) `…42397.1.2.1.3.1` (2 MAC without colons,
   3 BSSID, 6 band, 8 RSSI dBm). Only single-OID GETNEXT works: GETBULK times out, GET by index and

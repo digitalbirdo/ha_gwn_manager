@@ -73,7 +73,7 @@
       }
     },
     "error": {
-      "invalid_forward": "IPv4-Adressen mit Port eingeben, z. B. 10.0.0.3:5514, durch Komma getrennt; nicht der eigene Port dieses Empfängers."
+      "invalid_forward": "IPv4-Adressen mit Port eingeben, z. B. 10.0.0.3:5514, durch Komma getrennt; nicht dieses Home Assistant selbst (Loopback, eigene Adressen) auf dem Empfangsport."
     }
   },
   "entity": {

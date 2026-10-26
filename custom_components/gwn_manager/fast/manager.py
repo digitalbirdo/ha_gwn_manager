@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.components import network
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
@@ -36,6 +37,17 @@ if TYPE_CHECKING:
     from ..coordinator import GWNConfigEntry, GWNCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_own_addresses(hass: HomeAssistant) -> set[str]:
+    """IPv4 addresses of this host, to refuse syslog forwarding to itself."""
+    adapters = await network.async_get_adapters(hass)
+    return {
+        ip["address"]
+        for adapter in adapters
+        for ip in adapter["ipv4"]
+        if ip.get("address")
+    }
 # Changes arriving within this time are published together.
 DEBOUNCE = 1.0
 # Devices without usable SNMP are asked again after this time.
@@ -54,11 +66,7 @@ class FastSources:
         self.snmp_enabled = options.get(CONF_FAST_SNMP, False)
         self.port = options.get(CONF_SYSLOG_PORT, DEFAULT_SYSLOG_PORT)
         self.debug_events = options.get(CONF_SYSLOG_DEBUG_EVENTS, False)
-        try:
-            self.forward = parse_forward_targets(options.get(CONF_SYSLOG_FORWARD), self.port)
-        except ValueError as err:
-            _LOGGER.warning("Ignoring syslog forwarding targets: %s", err)
-            self.forward = []
+        self.forward: list[tuple[str, int]] = []
         self.community = options.get(CONF_SNMP_COMMUNITY, DEFAULT_SNMP_COMMUNITY)
         self.interval = options.get(CONF_SNMP_INTERVAL, DEFAULT_SNMP_INTERVAL)
         self._transport: asyncio.DatagramTransport | None = None
@@ -87,6 +95,14 @@ class FastSources:
         self.coordinator.fast_max_age = timedelta(
             seconds=max(30, 3 * (self.interval + 15)) if self.snmp_enabled else 30
         )
+        try:
+            self.forward = parse_forward_targets(
+                self.entry.options.get(CONF_SYSLOG_FORWARD),
+                self.port,
+                await async_own_addresses(self.hass),
+            )
+        except ValueError as err:
+            _LOGGER.warning("Ignoring syslog forwarding targets: %s", err)
         issue_id = f"syslog_port_unavailable_{self.entry.entry_id}"
         if self.syslog_enabled:
             try:
@@ -256,6 +272,7 @@ class FastSources:
             "syslog_forward_targets": len(self.forward),
             "syslog_forwarded": self._transport.get_protocol().stats["forwarded"] if self._transport else 0,
             "syslog_forward_errors": self._transport.get_protocol().stats["forward_errors"] if self._transport else 0,
+            "syslog_forward_skipped_loop": self._transport.get_protocol().stats["forward_skipped_loop"] if self._transport else 0,
             "snmp": self.snmp_enabled,
             "stats": dict(self.stats),
             "last_syslog": self.last_syslog,

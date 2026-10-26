@@ -9,6 +9,7 @@
     "frontend",
     "http",
     "lovelace",
+    "network",
     "websocket_api"
   ],
   "documentation": "https://github.com/digitalbirdo/ha_gwn_manager",
@@ -19,5 +20,5 @@
     "segno==1.6.6",
     "pysnmp>=7.1.27"
   ],
-  "version": "0.6.4"
+  "version": "0.6.5"
 }

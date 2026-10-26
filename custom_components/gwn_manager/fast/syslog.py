@@ -14,13 +14,19 @@ EventCallback = Callable[[str, SyslogEvent], None]
 Target = tuple[str, int]
 
 
-def parse_forward_targets(text: str | None, own_port: int | None = None) -> list[Target]:
+def parse_forward_targets(
+    text: str | None,
+    own_port: int | None = None,
+    own_addresses: Iterable[str] = (),
+) -> list[Target]:
     """Parse "ip:port" targets separated by commas, spaces or new lines.
 
     Only IPv4 addresses (no host names: resolving would block). Raises ValueError for
-    anything invalid, and for a loopback or wildcard target on the receiver's own port,
-    which would forward every message to itself in an endless loop.
+    anything invalid, and for a target that is this receiver itself (loopback, wildcard
+    or one of own_addresses on its own port), which would forward every message to
+    itself in an endless loop.
     """
+    own = set(own_addresses)
     targets: list[Target] = []
     for item in (text or "").replace(",", " ").split():
         host, sep, port_text = item.rpartition(":")
@@ -33,7 +39,9 @@ def parse_forward_targets(text: str | None, own_port: int | None = None) -> list
             address = ipaddress.IPv4Address(host)
         except ValueError as err:
             raise ValueError(f"not an IPv4 address: {host!r}") from err
-        if own_port is not None and port == own_port and (address.is_loopback or address.is_unspecified):
+        if own_port is not None and port == own_port and (
+            address.is_loopback or address.is_unspecified or str(address) in own
+        ):
             raise ValueError(f"{item!r} is this receiver itself")
         if (target := (str(address), port)) not in targets:
             targets.append(target)
@@ -53,7 +61,13 @@ class SyslogProtocol(asyncio.DatagramProtocol):
         if self._forward:
             self._out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._out.setblocking(False)
-        self.stats = {"lines": 0, "events": 0, "forwarded": 0, "forward_errors": 0}
+        self.stats = {
+            "lines": 0,
+            "events": 0,
+            "forwarded": 0,
+            "forward_errors": 0,
+            "forward_skipped_loop": 0,
+        }
         # Wall-clock time (time.time()) of the last datagram, any content.
         self.last_line: float | None = None
 
@@ -63,6 +77,11 @@ class SyslogProtocol(asyncio.DatagramProtocol):
         # Unchanged and first, so others get the complete stream whatever we make of it.
         if self._out is not None:
             for target in self._forward:
+                if target[0] == addr[0]:
+                    # Never answer the sender: forwarding back and forth between two hosts
+                    # would multiply every message endlessly.
+                    self.stats["forward_skipped_loop"] += 1
+                    continue
                 try:
                     self._out.sendto(data, target)
                     self.stats["forwarded"] += 1

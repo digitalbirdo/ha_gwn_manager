@@ -57,6 +57,7 @@ from .const import (
     MIN_SCAN_INTERVAL,
     MIN_SNMP_INTERVAL,
 )
+from .fast.manager import async_own_addresses
 from .fast.syslog import parse_forward_targets
 
 _LOGGER = logging.getLogger(__name__)
@@ -195,7 +196,9 @@ class GWNOptionsFlow(OptionsFlow):
                 user_input[CONF_SYSLOG_FORWARD] = ", ".join(
                     f"{host}:{port}"
                     for host, port in parse_forward_targets(
-                        user_input.get(CONF_SYSLOG_FORWARD), user_input.get(CONF_SYSLOG_PORT)
+                        user_input.get(CONF_SYSLOG_FORWARD),
+                        user_input.get(CONF_SYSLOG_PORT),
+                        await async_own_addresses(self.hass),
                     )
                 )
             except ValueError:
